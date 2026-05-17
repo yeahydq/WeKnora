@@ -393,6 +393,7 @@
     v-model:visible="citationDrawerVisible"
     :header="citationDrawerTitle || citationDrawerKnowledgeTitle || $t('chat.documentInfoEmpty')"
     size="480px"
+    :z-index="2500"
     placement="right"
     attach="body"
     :show-overlay="true"
@@ -436,6 +437,7 @@
     v-model:visible="wikiDrawerVisible"
     :header="wikiDrawerPage?.title || ''"
     size="480px"
+    :z-index="2400"
     :footer="false"
     placement="right"
     attach="body"
@@ -680,6 +682,11 @@ const openSourceDocumentPreview = async (group: { knowledgeId: string; title: st
   floatPopup.value.visible = false;
   floatPopup.value.pinned = false;
   cancelFloatClose();
+
+  if (wikiDrawerVisible.value) {
+    wikiDrawerVisible.value = false;
+    await nextTick();
+  }
 
   citationDrawerVisible.value = true;
   citationDrawerLoading.value = true;
