@@ -193,13 +193,34 @@
             <div v-if="graphDrawerNeighborHint" class="wiki-drawer-neighbor-hint" style="margin-bottom: 16px;">
               {{ graphDrawerNeighborHint }}
             </div>
-            <div ref="drawerBodyRef" class="wiki-reader-body" v-html="graphDrawerContent" @click="handleGraphDrawerClick"></div>
-            <div v-if="graphDrawerSourceRefs.length" class="wiki-drawer-sources-panel">
+            <div
+              v-if="graphDrawerSourceRefs.length && graphDrawerPage.page_type === 'summary'"
+              class="wiki-drawer-sources-panel"
+            >
               <div class="wiki-drawer-sources-title">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</div>
               <div class="wiki-drawer-sources-list">
                 <a
                   v-for="ref in graphDrawerSourceRefs"
-                  :key="`graph-source-${ref.id}`"
+                  :key="`graph-source-top-${ref.id}`"
+                  href="#"
+                  class="wiki-source-ref wiki-source-ref-block"
+                  @click.prevent="emit('open-source-doc', ref.id)"
+                >
+                  <t-icon name="file" size="14px" />
+                  <span class="wiki-source-ref-text">{{ ref.title }}</span>
+                </a>
+              </div>
+            </div>
+            <div ref="drawerBodyRef" class="wiki-reader-body" v-html="graphDrawerContent" @click="handleGraphDrawerClick"></div>
+            <div
+              v-if="graphDrawerSourceRefs.length && graphDrawerPage.page_type !== 'summary'"
+              class="wiki-drawer-sources-panel"
+            >
+              <div class="wiki-drawer-sources-title">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</div>
+              <div class="wiki-drawer-sources-list">
+                <a
+                  v-for="ref in graphDrawerSourceRefs"
+                  :key="`graph-source-bottom-${ref.id}`"
                   href="#"
                   class="wiki-source-ref wiki-source-ref-block"
                   @click.prevent="emit('open-source-doc', ref.id)"
