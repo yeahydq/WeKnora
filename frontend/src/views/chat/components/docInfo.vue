@@ -34,7 +34,7 @@
                     </div>
                     <div class="doc-group-actions" v-if="group.knowledgeBaseId" @click.stop>
                         <t-tooltip :content="$t('chat.navigateToDocument')">
-                            <span class="doc-group-navigate" @click="navigateToDocument(group)">
+                            <span class="doc-group-navigate" @click="openDocumentPreview(group)">
                                 <t-icon name="jump" size="14px" />
                             </span>
                         </t-tooltip>
@@ -56,15 +56,48 @@
             </div>
         </div>
     </div>
+
+    <t-drawer
+        v-model:visible="previewVisible"
+        :header="previewTitle"
+        size="82vw"
+        placement="right"
+        attach="body"
+        :show-overlay="true"
+        :close-btn="true"
+        :close-on-overlay-click="true"
+        :footer="false"
+    >
+        <div class="document-preview-shell">
+            <div v-if="previewLoading" class="preview-state">
+                <t-loading size="small" />
+                <span>{{ $t('common.loading') }}</span>
+            </div>
+            <div v-else-if="previewError" class="preview-state preview-error">
+                {{ previewError }}
+            </div>
+            <DocumentPreview
+                v-else-if="previewKnowledgeId && previewFileType"
+                :knowledgeId="previewKnowledgeId"
+                :fileType="previewFileType"
+                :fileName="previewFileName"
+                :active="previewVisible"
+            />
+            <div v-else class="preview-state preview-error">
+                {{ $t('chat.documentInfoEmpty') }}
+            </div>
+        </div>
+    </t-drawer>
 </template>
 <script setup>
 import { defineProps, computed, ref, reactive } from "vue";
-import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { MessagePlugin } from 'tdesign-vue-next';
 import { sanitizeHTML } from '@/utils/security';
+import { getKnowledgeDetails } from '@/api/knowledge-base/index';
+import DocumentPreview from '@/components/document-preview.vue';
 import ContentPopup from './tool-results/ContentPopup.vue';
 
-const router = useRouter();
 const { t } = useI18n();
 
 const props = defineProps({
@@ -80,6 +113,13 @@ const props = defineProps({
 
 const showReferBox = ref(false);
 const expandedGroups = reactive({});
+const previewVisible = ref(false);
+const previewLoading = ref(false);
+const previewError = ref('');
+const previewKnowledgeId = ref('');
+const previewFileType = ref('');
+const previewFileName = ref('');
+const previewTitle = ref('');
 
 const referBoxSwitch = () => {
     showReferBox.value = !showReferBox.value;
@@ -146,16 +186,30 @@ const truncateContent = (content, maxLen) => {
     return text.slice(0, maxLen) + '...';
 };
 
-const navigateToDocument = (group) => {
-    if (!group.knowledgeBaseId) return;
-    const query = {};
-    if (group.knowledgeId) {
-        query.knowledge_id = group.knowledgeId;
+const openDocumentPreview = async (group) => {
+    if (!group?.knowledgeId) return;
+
+    previewVisible.value = true;
+    previewLoading.value = true;
+    previewError.value = '';
+    previewKnowledgeId.value = group.knowledgeId;
+    previewFileType.value = '';
+    previewFileName.value = group.title || '';
+    previewTitle.value = group.title || t('chat.documentInfoEmpty');
+
+    try {
+        const res: any = await getKnowledgeDetails(group.knowledgeId);
+        const data = res?.data || res || {};
+        previewKnowledgeId.value = data.id || group.knowledgeId;
+        previewFileType.value = String(data.file_type || data.type || '').toLowerCase();
+        previewFileName.value = data.file_name || data.original_file_name || data.title || group.title || '';
+        previewTitle.value = data.title || data.file_name || group.title || t('chat.documentInfoEmpty');
+    } catch (err: any) {
+        previewError.value = err?.message || t('preview.loadFailed');
+        MessagePlugin.error(previewError.value);
+    } finally {
+        previewLoading.value = false;
     }
-    router.push({
-        path: `/platform/knowledge-bases/${group.knowledgeBaseId}`,
-        query
-    });
 };
 
 const getWebSearchUrl = (item) => {
@@ -378,6 +432,25 @@ const getWebSearchDisplayText = (item) => {
             margin-right: 4px;
         }
     }
+}
+
+.document-preview-shell {
+    height: calc(100vh - 120px);
+    min-height: 640px;
+}
+
+.preview-state {
+    min-height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-direction: column;
+    color: var(--td-text-color-secondary);
+}
+
+.preview-error {
+    color: var(--td-error-color);
 }
 </style>
 
