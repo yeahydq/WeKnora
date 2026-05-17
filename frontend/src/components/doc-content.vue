@@ -782,10 +782,16 @@ const handleDetailsScroll = () => {
     <t-drawer :visible="visible" :zIndex="2000" :closeBtn="true" :footer="false" @close="handleClose">
       <template #header>
         <div class="drawer-header">
-          <span class="header-title">{{ getDisplayTitle() }}</span>
-          <t-tag v-if="details.type" size="small" :theme="getTypeTheme()" variant="light">
-            {{ getTypeLabel() }}
-          </t-tag>
+          <div class="drawer-header-main">
+            <span class="header-title">{{ getDisplayTitle() }}</span>
+            <t-tag v-if="details.type" size="small" :theme="getTypeTheme()" variant="light">
+              {{ getTypeLabel() }}
+            </t-tag>
+          </div>
+          <button v-if="showSourceDocumentEntry" class="drawer-source-btn" type="button" @click="openSourceDocument">
+            <t-icon name="file" size="14px" />
+            <span>{{ $t('knowledgeEditor.wikiBrowser.sources') }}</span>
+          </button>
         </div>
       </template>
       
@@ -1077,15 +1083,46 @@ const handleDetailsScroll = () => {
 .drawer-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  
+  justify-content: space-between;
+  gap: 12px;
+
+  .drawer-header-main {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+
   .header-title {
     flex: 1;
+    min-width: 0;
     font-size: 16px;
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+.drawer-source-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 999px;
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+
+  &:hover {
+    color: var(--td-brand-color);
+    border-color: var(--td-brand-color);
+    background: var(--td-brand-color-light);
   }
 }
 
