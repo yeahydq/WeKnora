@@ -402,12 +402,13 @@
     :footer="false"
   >
     <div class="document-preview-shell">
-      <div class="wiki-reader-meta" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+      <div
+        v-if="citationDrawerChunkId"
+        class="wiki-reader-meta"
+        style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px;"
+      >
         <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
-          <strong class="wiki-reader-meta-text" style="font-size: 14px; line-height: 20px; word-break: break-all;">
-            {{ citationDrawerTitle || citationDrawerKnowledgeTitle || $t('chat.documentInfoEmpty') }}
-          </strong>
-          <span v-if="citationDrawerChunkId" class="wiki-reader-meta-text" style="font-size: 12px; opacity: 0.7; word-break: break-all;">
+          <span class="wiki-reader-meta-text" style="font-size: 12px; opacity: 0.7; word-break: break-all;">
             {{ $t('chat.chunkIdLabel') }} {{ citationDrawerChunkId }}
           </span>
         </div>
