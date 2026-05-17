@@ -283,6 +283,20 @@ const canPreview = (): boolean => {
   return previewSupportedTypes.has(ft);
 };
 
+const showSourceDocumentEntry = computed(() => {
+  return props.details?.type === 'file' && !!props.details?.id;
+});
+
+const openSourceDocument = async () => {
+  if (!props.details?.id) return;
+  viewMode.value = canPreview() ? 'preview' : 'merged';
+  await nextTick();
+  const contentHeader = mdContentWrap.value?.querySelector?.('.content_header');
+  if (contentHeader instanceof HTMLElement) {
+    contentHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
 // 当文档详情加载完成时，file 类型自动切换到「预览」；音频类型使用 merged + 播放器
 watch(() => props.details?.id, (newId) => {
   // 清理旧音频
@@ -830,6 +844,17 @@ const handleDetailsScroll = () => {
         </div>
       </div>
 
+      <div v-if="showSourceDocumentEntry" class="summary_box source-docs-box">
+        <span class="label">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</span>
+        <button class="source-doc-item" type="button" @click="openSourceDocument">
+          <div class="source-doc-main">
+            <t-icon name="file" size="14px" class="source-doc-icon" />
+            <span class="source-doc-title" :title="details.title">{{ details.title }}</span>
+          </div>
+          <t-icon name="jump" size="14px" class="source-doc-jump" />
+        </button>
+      </div>
+
       <div class="content_header">
         <div class="header-left">
           <div class="title-row">
@@ -1144,6 +1169,54 @@ const handleDetailsScroll = () => {
     color: var(--td-text-color-placeholder);
     font-size: 13px;
   }
+
+  &.source-docs-box {
+    margin-top: -8px;
+  }
+}
+
+.source-doc-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  background: var(--td-bg-color-container-hover);
+  color: var(--td-text-color-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+
+  &:hover {
+    border-color: var(--td-brand-color);
+    background: var(--td-brand-color-light);
+  }
+}
+
+.source-doc-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.source-doc-icon,
+.source-doc-jump {
+  flex: 0 0 auto;
+  color: var(--td-text-color-secondary);
+}
+
+.source-doc-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .label {
