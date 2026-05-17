@@ -458,6 +458,19 @@
         </t-link>
       </div>
       <div ref="wikiDrawerBodyRef" class="wiki-reader-body" v-html="wikiDrawerContent" @click="handleWikiDrawerClick"></div>
+      <div v-if="wikiDrawerSourceRefs.length" class="wiki-reader-sources">
+        <span class="wiki-link-label">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</span>
+        <a
+          v-for="ref in wikiDrawerSourceRefs"
+          :key="ref.id"
+          href="#"
+          class="wiki-source-ref"
+          @click.prevent="openSourceDocumentPreview({ knowledgeId: ref.id, title: ref.title })"
+        >
+          <t-icon name="file" size="14px" />
+          {{ ref.title }}
+        </a>
+      </div>
     </template>
   </t-drawer>
 </template>
@@ -649,6 +662,7 @@ const wikiDrawerVisible = ref(false);
 const wikiDrawerPage = ref<WikiPage | null>(null);
 const wikiDrawerBodyRef = ref<HTMLElement | null>(null);
 const currentWikiKbId = ref<string>('');
+const sourceRefTitleMap = ref<Record<string, string>>({});
 
 const citationDrawerVisible = ref(false);
 const citationDrawerLoading = ref(false);
@@ -734,12 +748,73 @@ const wikiDrawerContent = computed(() => {
   return marked.parse(preprocessed, { breaks: true, async: false }) as string;
 });
 
+type SourceRefDisplay = {
+  id: string;
+  title: string;
+};
+
+function fallbackSourceRefTitle(id: string): string {
+  return id.length > 20 ? id.substring(0, 8) + '...' : id;
+}
+
+function parseSourceRefs(refs?: string[]): SourceRefDisplay[] {
+  if (!refs?.length) return [];
+  return refs.map(ref => {
+    const pipeIdx = ref.indexOf('|');
+    if (pipeIdx > 0) {
+      return { id: ref.substring(0, pipeIdx), title: ref.substring(pipeIdx + 1) };
+    }
+    return {
+      id: ref,
+      title: sourceRefTitleMap.value[ref] || fallbackSourceRefTitle(ref),
+    };
+  });
+}
+
+const wikiDrawerSourceRefs = computed(() => parseSourceRefs(wikiDrawerPage.value?.source_refs));
+
+async function hydrateSourceRefTitles(refs?: string[]) {
+  if (!refs?.length) return;
+  const missingIds = refs
+    .filter(ref => !ref.includes('|'))
+    .filter(ref => !sourceRefTitleMap.value[ref]);
+
+  if (missingIds.length === 0) return;
+
+  await Promise.all(
+    missingIds.map(async (id) => {
+      try {
+        const res: any = await getKnowledgeDetails(id);
+        const data = res?.data || res;
+        const resolvedTitle = data?.title || data?.file_name || data?.fileName || fallbackSourceRefTitle(id);
+        sourceRefTitleMap.value = {
+          ...sourceRefTitleMap.value,
+          [id]: resolvedTitle,
+        };
+      } catch (_error) {
+        sourceRefTitleMap.value = {
+          ...sourceRefTitleMap.value,
+          [id]: fallbackSourceRefTitle(id),
+        };
+      }
+    }),
+  );
+}
+
 watch(wikiDrawerContent, async () => {
   await nextTick();
   if (wikiDrawerBodyRef.value) {
     await hydrateProtectedFileImages(wikiDrawerBodyRef.value);
   }
 });
+
+watch(
+  () => wikiDrawerPage.value?.source_refs,
+  (refs) => {
+    hydrateSourceRefTitles(refs);
+  },
+  { immediate: true },
+);
 
 const openWikiDrawer = async (kbId: string, slug: string) => {
   if (!kbId || !slug) return;
