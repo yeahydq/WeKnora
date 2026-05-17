@@ -460,13 +460,34 @@
           {{ $t('knowledgeEditor.wikiBrowser.viewInGraph') }}
         </t-link>
       </div>
-      <div ref="wikiDrawerBodyRef" class="wiki-reader-body" v-html="wikiDrawerContent" @click="handleWikiDrawerClick"></div>
-      <div v-if="wikiDrawerSourceRefs.length" class="wiki-drawer-sources-panel">
+      <div
+        v-if="wikiDrawerSourceRefs.length && wikiDrawerPage.page_type === 'summary'"
+        class="wiki-drawer-sources-panel"
+      >
         <div class="wiki-drawer-sources-title">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</div>
         <div class="wiki-drawer-sources-list">
           <a
             v-for="ref in wikiDrawerSourceRefs"
-            :key="ref.id"
+            :key="`summary-top-${ref.id}`"
+            href="#"
+            class="wiki-source-ref wiki-source-ref-block"
+            @click.prevent="openSourceDocumentPreview({ knowledgeId: ref.id, title: ref.title })"
+          >
+            <t-icon name="file" size="14px" />
+            <span class="wiki-source-ref-text">{{ ref.title }}</span>
+          </a>
+        </div>
+      </div>
+      <div ref="wikiDrawerBodyRef" class="wiki-reader-body" v-html="wikiDrawerContent" @click="handleWikiDrawerClick"></div>
+      <div
+        v-if="wikiDrawerSourceRefs.length && wikiDrawerPage.page_type !== 'summary'"
+        class="wiki-drawer-sources-panel"
+      >
+        <div class="wiki-drawer-sources-title">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</div>
+        <div class="wiki-drawer-sources-list">
+          <a
+            v-for="ref in wikiDrawerSourceRefs"
+            :key="`summary-bottom-${ref.id}`"
             href="#"
             class="wiki-source-ref wiki-source-ref-block"
             @click.prevent="openSourceDocumentPreview({ knowledgeId: ref.id, title: ref.title })"
