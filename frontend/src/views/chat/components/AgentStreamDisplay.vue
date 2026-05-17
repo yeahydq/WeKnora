@@ -689,6 +689,7 @@ const KB_SNIPPET_LIMIT = 600;
 
 const floatPopup = ref<{
   visible: boolean;
+  pinned: boolean;
   top: number;
   left: number;
   width: number;
@@ -704,6 +705,7 @@ const floatPopup = ref<{
   knowledgeTitle?: string;
 }>({
   visible: false,
+  pinned: false,
   top: 0,
   left: 0,
   width: 420,
@@ -718,6 +720,7 @@ const floatPopup = ref<{
 let floatCloseTimer: number | null = null;
 
 const scheduleFloatClose = () => {
+  if (floatPopup.value.pinned) return;
   if (floatCloseTimer) window.clearTimeout(floatCloseTimer);
   floatCloseTimer = window.setTimeout(() => {
     // Double-check mouse is not over citation or popup before closing
@@ -747,6 +750,35 @@ const openFloatForEl = (el: HTMLElement, widthAdjust = 120) => {
   floatPopup.value.visible = true;
   // Cancel any pending close when opening
   cancelFloatClose();
+};
+
+const openPinnedKbCitation = (el: HTMLElement, chunkId: string, knowledgeTitle: string) => {
+  const prevPinned = floatPopup.value.pinned && floatPopup.value.type === 'kb' && floatPopup.value.chunkId === chunkId;
+  floatPopup.value.pinned = !prevPinned;
+  if (!floatPopup.value.pinned) {
+    floatPopup.value.visible = false;
+    cancelFloatClose();
+    return;
+  }
+
+  cancelFloatClose();
+  floatPopup.value.type = 'kb';
+  floatPopup.value.chunkId = chunkId;
+  floatPopup.value.knowledgeTitle = knowledgeTitle;
+  const cacheEntry = kbChunkDetails.value[chunkId];
+  if (cacheEntry) {
+    syncFloatPopupFromCache(chunkId, cacheEntry);
+    updateKBCitationTooltip(chunkId, cacheEntry);
+  } else {
+    floatPopup.value.loading = true;
+    floatPopup.value.error = undefined;
+    floatPopup.value.content = '';
+  }
+  openFloatForEl(el);
+
+  if (!cacheEntry || (!cacheEntry.loading && !cacheEntry.html && !cacheEntry.error)) {
+    loadChunkDetails(chunkId);
+  }
 };
 
 // Import icons
@@ -1430,6 +1462,7 @@ const onHover = (e: Event) => {
     if (kbHoverTimer) window.clearTimeout(kbHoverTimer);
     kbHoverTimer = window.setTimeout(() => {
       cancelFloatClose();
+      floatPopup.value.pinned = false;
       floatPopup.value.type = 'kb';
       floatPopup.value.chunkId = chunkId;
       floatPopup.value.knowledgeTitle = knowledgeTitle;
@@ -1583,14 +1616,9 @@ const onRootClick = (e: Event) => {
     e.preventDefault();
     e.stopPropagation();
     const kbId = kbEl.getAttribute('data-kb-id');
-    if (kbId) {
-      try {
-        // Navigate to knowledge base detail page
-        router.push(`/platform/knowledge-bases/${kbId}`);
-      } catch (error) {
-        console.error('Failed to navigate to knowledge base:', error);
-      }
-    }
+    const chunkId = kbEl.getAttribute('data-chunk-id') || '';
+    const knowledgeTitle = kbEl.getAttribute('data-doc') || '';
+    if (kbId && chunkId) openPinnedKbCitation(kbEl, chunkId, knowledgeTitle);
     return;
   }
   
@@ -1644,14 +1672,10 @@ const onRootKeydown = (e: KeyboardEvent) => {
   if (kbEl) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
+      const chunkId = kbEl.getAttribute('data-chunk-id') || '';
+      const knowledgeTitle = kbEl.getAttribute('data-doc') || '';
       const kbId = kbEl.getAttribute('data-kb-id');
-      if (kbId) {
-        try {
-          router.push(`/platform/knowledge-bases/${kbId}`);
-        } catch (error) {
-          console.error('Failed to navigate to knowledge base:', error);
-        }
-      }
+      if (kbId && chunkId) openPinnedKbCitation(kbEl, chunkId, knowledgeTitle);
     }
     return;
   }
