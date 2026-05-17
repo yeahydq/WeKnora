@@ -254,6 +254,26 @@
               </t-button>
             </t-tooltip>
           </div>
+          <div v-if="event.done && sourceDocGroups.length" class="source-docs-panel">
+            <div class="source-docs-header">
+              <span class="source-docs-title">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</span>
+              <span class="source-docs-count">{{ sourceDocGroups.length }}</span>
+            </div>
+            <div class="source-docs-list">
+              <t-tooltip
+                v-for="group in sourceDocGroups"
+                :key="group.key"
+                :content="$t('chat.navigateToDocument')"
+                placement="top"
+              >
+                <button class="source-doc-item" type="button" @click.stop="openSourceDocumentPreview(group)">
+                  <t-icon name="file" size="14px" class="source-doc-icon" />
+                  <span class="source-doc-text" :title="group.title">{{ group.title }}</span>
+                  <t-icon name="jump" size="14px" class="source-doc-jump" />
+                </button>
+              </t-tooltip>
+            </div>
+          </div>
         </div>
 
         <!-- Tool Call Event (non-thinking) -->
@@ -640,6 +660,38 @@ const citationDrawerTitle = ref('');
 const citationDrawerChunkId = ref('');
 const citationDrawerKnowledgeTitle = ref('');
 
+const openSourceDocumentPreview = async (group: { knowledgeId: string; title: string }) => {
+  if (!group?.knowledgeId) return;
+
+  floatPopup.value.visible = false;
+  floatPopup.value.pinned = false;
+  cancelFloatClose();
+
+  citationDrawerVisible.value = true;
+  citationDrawerLoading.value = true;
+  citationDrawerError.value = '';
+  citationDrawerKnowledgeId.value = group.knowledgeId;
+  citationDrawerFileType.value = '';
+  citationDrawerFileName.value = group.title || '';
+  citationDrawerTitle.value = group.title || t('chat.documentInfoEmpty');
+  citationDrawerChunkId.value = '';
+  citationDrawerKnowledgeTitle.value = group.title || '';
+
+  try {
+    const knowledgeRes: any = await getKnowledgeDetails(group.knowledgeId);
+    const knowledge = knowledgeRes?.data || knowledgeRes || {};
+    citationDrawerKnowledgeId.value = knowledge.id || group.knowledgeId;
+    citationDrawerFileType.value = String(knowledge.file_type || knowledge.type || '').toLowerCase();
+    citationDrawerFileName.value = knowledge.file_name || knowledge.original_file_name || knowledge.title || group.title || '';
+    citationDrawerTitle.value = knowledge.title || knowledge.file_name || group.title || t('chat.documentInfoEmpty');
+  } catch (error: any) {
+    citationDrawerError.value = error?.message || t('preview.loadFailed');
+    MessagePlugin.error(citationDrawerError.value);
+  } finally {
+    citationDrawerLoading.value = false;
+  }
+};
+
 function getTypeTheme(type: string): string {
   const map: Record<string, string> = {
     summary: 'primary', entity: 'success', concept: 'warning',
@@ -905,6 +957,38 @@ const preprocessMathDelimiters = (rawText: string): string => {
 
 // Event stream
 const eventStream = computed(() => props.session?.agentEventStream || []);
+const sourceKnowledgeRefs = computed(() => {
+  const refs = props.session?.knowledge_references || [];
+  return refs.filter((item: any) => item && item.chunk_type !== 'web_search');
+});
+
+const sourceDocGroups = computed(() => {
+  const refs = sourceKnowledgeRefs.value;
+  if (!refs.length) return [];
+
+  const groupMap = new Map<string, {
+    key: string;
+    title: string;
+    knowledgeId: string;
+    chunks: any[];
+  }>();
+
+  for (const item of refs) {
+    const key = item.knowledge_id || item.knowledge_title || item.id;
+    if (!key) continue;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        key,
+        title: item.knowledge_title || item.knowledge_filename || key,
+        knowledgeId: item.knowledge_id || '',
+        chunks: [],
+      });
+    }
+    groupMap.get(key)!.chunks.push(item);
+  }
+
+  return Array.from(groupMap.values());
+});
 
 // Expanded events tracking (for tool calls and thinking events)
 const expandedEvents = ref<Set<string>>(new Set());
@@ -2809,6 +2893,81 @@ const handleAddToKnowledge = (answerEvent: any) => {
 
   .answer-toolbar {
     margin-top: 10px;
+  }
+
+  .source-docs-panel {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--td-component-stroke);
+    border-radius: 10px;
+    background: var(--td-bg-color-container);
+  }
+
+  .source-docs-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .source-docs-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+  }
+
+  .source-docs-count {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--td-brand-color-light);
+    color: var(--td-brand-color);
+    font-size: 11px;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  .source-docs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .source-doc-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--td-component-stroke);
+    border-radius: 8px;
+    background: var(--td-bg-color-secondarycontainer);
+    color: var(--td-text-color-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+
+    &:hover {
+      border-color: var(--td-brand-color);
+      background: var(--td-brand-color-light);
+    }
+  }
+
+  .source-doc-icon,
+  .source-doc-jump {
+    flex: 0 0 auto;
+    color: var(--td-text-color-secondary);
+  }
+
+  .source-doc-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 18px;
   }
 }
 
