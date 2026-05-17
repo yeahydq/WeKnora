@@ -460,18 +460,20 @@
         </t-link>
       </div>
       <div ref="wikiDrawerBodyRef" class="wiki-reader-body" v-html="wikiDrawerContent" @click="handleWikiDrawerClick"></div>
-      <div v-if="wikiDrawerSourceRefs.length" class="wiki-reader-sources">
-        <span class="wiki-link-label">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</span>
-        <a
-          v-for="ref in wikiDrawerSourceRefs"
-          :key="ref.id"
-          href="#"
-          class="wiki-source-ref"
-          @click.prevent="openSourceDocumentPreview({ knowledgeId: ref.id, title: ref.title })"
-        >
-          <t-icon name="file" size="14px" />
-          {{ ref.title }}
-        </a>
+      <div v-if="wikiDrawerSourceRefs.length" class="wiki-drawer-sources-panel">
+        <div class="wiki-drawer-sources-title">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</div>
+        <div class="wiki-drawer-sources-list">
+          <a
+            v-for="ref in wikiDrawerSourceRefs"
+            :key="ref.id"
+            href="#"
+            class="wiki-source-ref wiki-source-ref-block"
+            @click.prevent="openSourceDocumentPreview({ knowledgeId: ref.id, title: ref.title })"
+          >
+            <t-icon name="file" size="14px" />
+            <span class="wiki-source-ref-text">{{ ref.title }}</span>
+          </a>
+        </div>
       </div>
     </template>
   </t-drawer>
@@ -3394,23 +3396,6 @@ const handleAddToKnowledge = (answerEvent: any) => {
   }
 }
 
-.wiki-reader-sources {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--td-component-stroke);
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 13px;
-}
-
-.wiki-link-label {
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-  margin-right: 4px;
-}
-
 .wiki-source-ref {
   display: inline-flex;
   align-items: center;
@@ -3428,6 +3413,42 @@ const handleAddToKnowledge = (answerEvent: any) => {
     background: var(--td-brand-color-light);
     text-decoration: none;
   }
+}
+
+.wiki-source-ref-block {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.wiki-source-ref-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-drawer-sources-panel {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--td-component-stroke);
+}
+
+.wiki-drawer-sources-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--td-text-color-secondary);
+}
+
+.wiki-drawer-sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .plan-status-summary-fixed {
