@@ -194,6 +194,21 @@
               {{ graphDrawerNeighborHint }}
             </div>
             <div ref="drawerBodyRef" class="wiki-reader-body" v-html="graphDrawerContent" @click="handleGraphDrawerClick"></div>
+            <div v-if="graphDrawerSourceRefs.length" class="wiki-drawer-sources-panel">
+              <div class="wiki-drawer-sources-title">{{ $t('knowledgeEditor.wikiBrowser.sources') }}</div>
+              <div class="wiki-drawer-sources-list">
+                <a
+                  v-for="ref in graphDrawerSourceRefs"
+                  :key="`graph-source-${ref.id}`"
+                  href="#"
+                  class="wiki-source-ref wiki-source-ref-block"
+                  @click.prevent="emit('open-source-doc', ref.id)"
+                >
+                  <t-icon name="file" size="14px" />
+                  <span class="wiki-source-ref-text">{{ ref.title }}</span>
+                </a>
+              </div>
+            </div>
           </template>
         </t-drawer>
       </div>
@@ -635,6 +650,8 @@ import { useMenuStore } from '@/stores/menu'
 import { useSettingsStore } from '@/stores/settings'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
+import markedKatex from 'marked-katex-extension'
+import 'katex/dist/katex.min.css'
 import { MessagePlugin } from 'tdesign-vue-next'
 // RecycleScroller virtualizes the sidebar page lists so expanding a
 // 40k-item group no longer commits 40k DOM nodes. Each item has a fixed
@@ -644,6 +661,7 @@ import { RecycleScroller } from 'vue-virtual-scroller'
 import { hydrateProtectedFileImages } from '@/utils/security'
 import picturePreview from '@/components/picture-preview.vue'
 import { createSessions } from '@/api/chat'
+import { getKnowledgeDetails } from '@/api/knowledge-base'
 import ChatView from '@/views/chat/index.vue'
 import {
   listWikiPages,
@@ -671,6 +689,17 @@ const settingsStore = useSettingsStore()
 
 const { t } = useI18n()
 
+marked.use({
+  breaks: true,
+  gfm: true,
+})
+marked.use(markedKatex({ throwOnError: false, nonStandard: true }))
+
+type SourceRefDisplay = {
+  id: string
+  title: string
+}
+
 const props = defineProps<{
   knowledgeBaseId: string
   view?: 'browser' | 'graph'
@@ -682,6 +711,7 @@ const emit = defineEmits<{
 }>()
 const pages = ref<WikiPage[]>([])
 const selectedPage = ref<WikiPage | null>(null)
+const sourceRefTitleMap = ref<Record<string, string>>({})
 
 // Per-type pagination state for the sidebar. 4万-page wikis used to load
 // the entire page list into `pages.value` at startup (50 pages of 500 =
@@ -997,17 +1027,55 @@ const hasContentPages = computed(() => {
 })
 
 // Parse source refs in "id|title" format
-const parsedSourceRefs = computed(() => {
-  if (!selectedPage.value?.source_refs?.length) return []
-  return selectedPage.value.source_refs.map(ref => {
+function fallbackSourceRefTitle(id: string): string {
+  return id.length > 20 ? id.substring(0, 8) + '...' : id
+}
+
+function parseSourceRefs(refs?: string[]): SourceRefDisplay[] {
+  if (!refs?.length) return []
+  return refs.map(ref => {
     const pipeIdx = ref.indexOf('|')
     if (pipeIdx > 0) {
       return { id: ref.substring(0, pipeIdx), title: ref.substring(pipeIdx + 1) }
     }
-    // Fallback: show raw ref (backwards compat with old data)
-    return { id: ref, title: ref.length > 20 ? ref.substring(0, 8) + '...' : ref }
+    return {
+      id: ref,
+      title: sourceRefTitleMap.value[ref] || fallbackSourceRefTitle(ref),
+    }
   })
-})
+}
+
+const parsedSourceRefs = computed(() => parseSourceRefs(selectedPage.value?.source_refs))
+
+const graphDrawerSourceRefs = computed(() => parseSourceRefs(graphDrawerPage.value?.source_refs))
+
+async function hydrateSourceRefTitles(refs?: string[]) {
+  if (!refs?.length) return
+  const missingIds = refs
+    .filter(ref => !ref.includes('|'))
+    .filter(ref => !sourceRefTitleMap.value[ref])
+
+  if (missingIds.length === 0) return
+
+  await Promise.all(
+    missingIds.map(async (id) => {
+      try {
+        const res: any = await getKnowledgeDetails(id)
+        const data = res?.data || res
+        const resolvedTitle = data?.title || data?.file_name || data?.fileName || fallbackSourceRefTitle(id)
+        sourceRefTitleMap.value = {
+          ...sourceRefTitleMap.value,
+          [id]: resolvedTitle,
+        }
+      } catch (error) {
+        sourceRefTitleMap.value = {
+          ...sourceRefTitleMap.value,
+          [id]: fallbackSourceRefTitle(id),
+        }
+      }
+    }),
+  )
+}
 
 // Rendered content for graph drawer
 const graphDrawerContent = computed(() => {
@@ -1239,6 +1307,22 @@ watch(graphDrawerContent, async () => {
   }
 })
 
+watch(
+  () => selectedPage.value?.source_refs,
+  (refs) => {
+    hydrateSourceRefTitles(refs)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => graphDrawerPage.value?.source_refs,
+  (refs) => {
+    hydrateSourceRefTitles(refs)
+  },
+  { immediate: true },
+)
+
 function renderMarkdown(content: string): string {
   // Pre-process wiki links [[slug|name]] to custom HTML tags
   let preprocessed = content.replace(/\[\[([^\]]+)\]\]/g, (_, inner: string) => {
@@ -1247,6 +1331,21 @@ function renderMarkdown(content: string): string {
     const display = pipeIdx > 0 ? inner.substring(pipeIdx + 1).trim() : slugDisplayName(slug)
     return `<a href="#" class="wiki-content-link" data-slug="${slug}">${display}</a>`
   })
+
+  // Normalize escaped LaTeX delimiters used by parser / LLM output so
+  // marked-katex-extension can render them.
+  preprocessed = preprocessed
+    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+    .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$')
+
+  // Some wiki pages store formulas as plain parentheses wrapping LaTeX-ish
+  // content, e.g. `(6 \mathrm{~V})` instead of `\(6 \mathrm{~V}\)`.
+  // Promote only groups that look math-like so normal Chinese prose in
+  // parentheses stays untouched.
+  preprocessed = preprocessed.replace(
+    /\(([^()\n]*\\[A-Za-z]+[^()\n]*)\)/g,
+    (_match, inner: string) => `$${inner.trim()}$`,
+  )
 
   // Use marked to render the markdown to HTML
   return marked.parse(preprocessed, { breaks: true, async: false }) as string
@@ -4179,6 +4278,42 @@ onUnmounted(() => {
   &:hover {
     background: var(--td-brand-color-light);
   }
+}
+
+.wiki-source-ref-block {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.wiki-source-ref-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-drawer-sources-panel {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--td-component-stroke);
+}
+
+.wiki-drawer-sources-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--td-text-color-secondary);
+}
+
+.wiki-drawer-sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 // ── Empty states ──
