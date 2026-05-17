@@ -3394,6 +3394,42 @@ const handleAddToKnowledge = (answerEvent: any) => {
   }
 }
 
+.wiki-reader-sources {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--td-component-stroke);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.wiki-link-label {
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+  margin-right: 4px;
+}
+
+.wiki-source-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: 4px;
+  color: var(--td-brand-color);
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--td-brand-color-light);
+    text-decoration: none;
+  }
+}
+
 .plan-status-summary-fixed {
   padding: 6px 10px;
   background: var(--td-bg-color-container);
