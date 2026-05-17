@@ -367,6 +367,49 @@
   
   <!-- Image Preview -->
   <picturePreview :reviewImg="imagePreviewVisible" :reviewUrl="imagePreviewUrl" @closePreImg="closeImagePreview" />
+
+  <!-- Citation Preview Drawer -->
+  <t-drawer
+    v-model:visible="citationDrawerVisible"
+    :header="citationDrawerTitle || citationDrawerKnowledgeTitle || $t('chat.documentInfoEmpty')"
+    size="480px"
+    placement="right"
+    attach="body"
+    :show-overlay="true"
+    :close-btn="true"
+    :close-on-overlay-click="true"
+    :footer="false"
+  >
+    <div class="document-preview-shell">
+      <div class="wiki-reader-meta" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+        <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+          <strong class="wiki-reader-meta-text" style="font-size: 14px; line-height: 20px; word-break: break-all;">
+            {{ citationDrawerTitle || citationDrawerKnowledgeTitle || $t('chat.documentInfoEmpty') }}
+          </strong>
+          <span v-if="citationDrawerChunkId" class="wiki-reader-meta-text" style="font-size: 12px; opacity: 0.7; word-break: break-all;">
+            {{ $t('chat.chunkIdLabel') }} {{ citationDrawerChunkId }}
+          </span>
+        </div>
+      </div>
+      <div v-if="citationDrawerLoading" class="preview-state">
+        <t-loading size="small" />
+        <span>{{ $t('common.loading') }}</span>
+      </div>
+      <div v-else-if="citationDrawerError" class="preview-state preview-error">
+        {{ citationDrawerError }}
+      </div>
+      <DocumentPreview
+        v-else-if="citationDrawerKnowledgeId && citationDrawerFileType"
+        :knowledgeId="citationDrawerKnowledgeId"
+        :fileType="citationDrawerFileType"
+        :fileName="citationDrawerFileName"
+        :active="citationDrawerVisible"
+      />
+      <div v-else class="preview-state preview-error">
+        {{ $t('chat.documentInfoEmpty') }}
+      </div>
+    </div>
+  </t-drawer>
   
   <!-- Wiki Page Detail Drawer -->
   <t-drawer
@@ -409,7 +452,8 @@ import DOMPurify from 'dompurify';
 import ToolResultRenderer from './ToolResultRenderer.vue';
 import ToolApprovalCard from './ToolApprovalCard.vue';
 import picturePreview from '@/components/picture-preview.vue';
-import { getChunkByIdOnly } from '@/api/knowledge-base';
+import DocumentPreview from '@/components/document-preview.vue';
+import { getChunkByIdOnly, getKnowledgeDetails } from '@/api/knowledge-base';
 import { getWikiPage, type WikiPage } from '@/api/wiki';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useUIStore } from '@/stores/ui';
@@ -586,6 +630,16 @@ const wikiDrawerPage = ref<WikiPage | null>(null);
 const wikiDrawerBodyRef = ref<HTMLElement | null>(null);
 const currentWikiKbId = ref<string>('');
 
+const citationDrawerVisible = ref(false);
+const citationDrawerLoading = ref(false);
+const citationDrawerError = ref('');
+const citationDrawerKnowledgeId = ref('');
+const citationDrawerFileType = ref('');
+const citationDrawerFileName = ref('');
+const citationDrawerTitle = ref('');
+const citationDrawerChunkId = ref('');
+const citationDrawerKnowledgeTitle = ref('');
+
 function getTypeTheme(type: string): string {
   const map: Record<string, string> = {
     summary: 'primary', entity: 'success', concept: 'warning',
@@ -645,6 +699,42 @@ const openWikiDrawer = async (kbId: string, slug: string) => {
   } catch (e) {
     console.error(`Failed to load page ${slug}:`, e);
     MessagePlugin.warning(t('agentStream.citation.loadFailed'));
+  }
+};
+
+const openKbCitationDrawer = async (kbId: string, chunkId: string, knowledgeTitle: string) => {
+  if (!kbId || !chunkId) return;
+
+  floatPopup.value.visible = false;
+  floatPopup.value.pinned = false;
+  cancelFloatClose();
+
+  citationDrawerVisible.value = true;
+  citationDrawerLoading.value = true;
+  citationDrawerError.value = '';
+  citationDrawerKnowledgeId.value = '';
+  citationDrawerFileType.value = '';
+  citationDrawerFileName.value = '';
+  citationDrawerTitle.value = knowledgeTitle || '';
+  citationDrawerChunkId.value = chunkId;
+  citationDrawerKnowledgeTitle.value = knowledgeTitle || '';
+
+  try {
+    const chunkRes: any = await getChunkByIdOnly(chunkId);
+    const chunk = chunkRes?.data || chunkRes || {};
+    const knowledgeId = chunk.knowledge_id || kbId;
+    citationDrawerKnowledgeId.value = knowledgeId;
+
+    const knowledgeRes: any = await getKnowledgeDetails(knowledgeId);
+    const knowledge = knowledgeRes?.data || knowledgeRes || {};
+    citationDrawerFileType.value = String(knowledge.file_type || knowledge.type || '').toLowerCase();
+    citationDrawerFileName.value = knowledge.file_name || knowledge.original_file_name || knowledge.title || knowledgeTitle || '';
+    citationDrawerTitle.value = knowledge.title || knowledge.file_name || knowledgeTitle || t('chat.documentInfoEmpty');
+  } catch (error: any) {
+    citationDrawerError.value = error?.message || t('preview.loadFailed');
+    MessagePlugin.error(citationDrawerError.value);
+  } finally {
+    citationDrawerLoading.value = false;
   }
 };
 
@@ -1618,7 +1708,7 @@ const onRootClick = (e: Event) => {
     const kbId = kbEl.getAttribute('data-kb-id');
     const chunkId = kbEl.getAttribute('data-chunk-id') || '';
     const knowledgeTitle = kbEl.getAttribute('data-doc') || '';
-    if (kbId && chunkId) openPinnedKbCitation(kbEl, chunkId, knowledgeTitle);
+    if (kbId && chunkId) openKbCitationDrawer(kbId, chunkId, knowledgeTitle);
     return;
   }
   
@@ -1675,7 +1765,7 @@ const onRootKeydown = (e: KeyboardEvent) => {
       const chunkId = kbEl.getAttribute('data-chunk-id') || '';
       const knowledgeTitle = kbEl.getAttribute('data-doc') || '';
       const kbId = kbEl.getAttribute('data-kb-id');
-      if (kbId && chunkId) openPinnedKbCitation(kbEl, chunkId, knowledgeTitle);
+      if (kbId && chunkId) openKbCitationDrawer(kbId, chunkId, knowledgeTitle);
     }
     return;
   }

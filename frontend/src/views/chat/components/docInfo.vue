@@ -89,7 +89,7 @@
         </div>
     </t-drawer>
 </template>
-<script setup>
+<script setup lang="ts">
 import { defineProps, computed, ref, reactive } from "vue";
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
