@@ -1501,6 +1501,11 @@ const getKbIdForWiki = (slug: string): string => {
     return '';
   };
 
+  const extractKbIdFromFoundMap = (foundKbs: unknown): string => {
+    if (!foundKbs || typeof foundKbs !== 'object') return '';
+    return pickKbId((foundKbs as Record<string, unknown>)[slug]);
+  };
+
   // Try to extract from agent event stream (retrieval pipeline). Walk
   // backwards so we prefer the most recent tool call's mapping.
   if (props.session?.agentEventStream) {
@@ -1508,7 +1513,24 @@ const getKbIdForWiki = (slug: string): string => {
       const event = props.session.agentEventStream[i];
       const foundKbs = event?.tool_data?.found_kbs;
       if (event.type === 'tool_call' && foundKbs) {
-        const hit = pickKbId(foundKbs[slug]);
+        const hit = extractKbIdFromFoundMap(foundKbs);
+        if (hit) return hit;
+      }
+    }
+  }
+
+  // Historical messages are restored from `agent_steps`. In some cases the
+  // transient event stream may be missing or incomplete, so read the original
+  // persisted tool-call results as a second source of truth.
+  const agentSteps = (props.session as any)?.agent_steps;
+  if (Array.isArray(agentSteps)) {
+    for (let i = agentSteps.length - 1; i >= 0; i--) {
+      const step = agentSteps[i];
+      const toolCalls = step?.tool_calls;
+      if (!Array.isArray(toolCalls)) continue;
+      for (let j = toolCalls.length - 1; j >= 0; j--) {
+        const foundKbs = toolCalls[j]?.result?.data?.found_kbs;
+        const hit = extractKbIdFromFoundMap(foundKbs);
         if (hit) return hit;
       }
     }
@@ -1518,8 +1540,12 @@ const getKbIdForWiki = (slug: string): string => {
   const selectedKbs = settingsStore.getSelectedKnowledgeBases();
   if (selectedKbs && selectedKbs.length > 0) return selectedKbs[0];
 
-  if (authStore.knowledgeBases && authStore.knowledgeBases.length > 0) {
-    return authStore.knowledgeBases[0].id;
+  const wikiEnabledKbs = (authStore.knowledgeBases || []).filter((kb: any) => {
+    const caps = kb?.capabilities;
+    return caps?.wiki || kb?.wikiEnabled || kb?.indexing_strategy?.wiki_enabled;
+  });
+  if (wikiEnabledKbs.length === 1) {
+    return wikiEnabledKbs[0].id;
   }
 
   return '';
