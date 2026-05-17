@@ -2872,18 +2872,23 @@ function renderGraph(opts: RenderGraphOpts = {}) {
     circle.style.transition = 'r 0.2s, stroke-width 0.2s, opacity 0.2s'
     g.appendChild(circle)
 
-    // Text label wrapper for better readability
-    const textBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-    g.appendChild(textBg) // we'll size this after we know text size
-
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text.setAttribute('text-anchor', 'middle')
     text.setAttribute('dy', String(r + 14))
-    text.setAttribute('font-size', '11')
-    text.setAttribute('fill', 'var(--td-text-color-secondary)')
+    text.setAttribute('font-size', '12')
+    text.setAttribute('font-weight', '600')
+    text.setAttribute('fill', '#f5f7fa')
+    text.setAttribute('stroke', 'rgba(24, 24, 27, 0.82)')
+    text.setAttribute('stroke-width', '1.4')
+    text.setAttribute('paint-order', 'stroke fill')
+    text.setAttribute('stroke-linejoin', 'round')
     text.setAttribute('pointer-events', 'none')
+    text.setAttribute('font-family', '"SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif')
+    text.setAttribute('lengthAdjust', 'spacingAndGlyphs')
     text.style.transition = 'opacity 0.2s' // Smooth fade in/out
-    text.style.textShadow = '0 1px 3px var(--td-bg-color-container), 0 -1px 3px var(--td-bg-color-container), 1px 0 3px var(--td-bg-color-container), -1px 0 3px var(--td-bg-color-container)'
+    text.style.textRendering = 'geometricPrecision'
+    ;(text.style as any).webkitFontSmoothing = 'antialiased'
+    ;(text.style as any).mozOsxFontSmoothing = 'grayscale'
     text.textContent = n.title.length > 14 ? n.title.substring(0, 14) + '…' : n.title
     g.appendChild(text)
 
