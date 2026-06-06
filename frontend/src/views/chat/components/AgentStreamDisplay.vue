@@ -387,12 +387,15 @@
   
   <!-- Image Preview -->
   <picturePreview :reviewImg="imagePreviewVisible" :reviewUrl="imagePreviewUrl" @closePreImg="closeImagePreview" />
+  <Teleport to="body">
+    <div v-if="isCitationDrawerResizing" class="drawer-resize-overlay" />
+  </Teleport>
 
   <!-- Citation Preview Drawer -->
   <t-drawer
     v-model:visible="citationDrawerVisible"
     :header="citationDrawerTitle || citationDrawerKnowledgeTitle || $t('chat.documentInfoEmpty')"
-    size="480px"
+    :size="`${citationDrawerWidth}px`"
     :z-index="2500"
     placement="right"
     attach="body"
@@ -400,7 +403,9 @@
     :close-btn="true"
     :close-on-overlay-click="true"
     :footer="false"
+    :class="['citation-preview-drawer', { 'is-resizing': isCitationDrawerResizing }]"
   >
+    <div class="drawer-resize-handle" @mousedown="startCitationDrawerResize" />
     <div class="document-preview-shell">
       <div
         v-if="citationDrawerChunkId"
@@ -700,6 +705,58 @@ const citationDrawerFileName = ref('');
 const citationDrawerTitle = ref('');
 const citationDrawerChunkId = ref('');
 const citationDrawerKnowledgeTitle = ref('');
+const citationDrawerWidth = ref(480);
+const isCitationDrawerResizing = ref(false);
+const citationDrawerMinWidth = 420;
+const citationDrawerMaxViewportPadding = 160;
+
+const getCitationDrawerContentWrapper = (): HTMLElement | null => {
+  return document.querySelector('.citation-preview-drawer .t-drawer__content-wrapper');
+};
+
+const applyCitationDrawerWidth = (width: number) => {
+  const wrapper = getCitationDrawerContentWrapper();
+  if (wrapper) {
+    wrapper.style.width = `${width}px`;
+    wrapper.style.maxWidth = 'calc(100vw - 24px)';
+  }
+};
+
+const clampCitationDrawerWidth = (width: number) => {
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1440;
+  const maxWidth = Math.max(citationDrawerMinWidth, viewportWidth - citationDrawerMaxViewportPadding);
+  return Math.min(Math.max(width, citationDrawerMinWidth), maxWidth);
+};
+
+const onCitationDrawerResize = (event: MouseEvent) => {
+  const nextWidth = window.innerWidth - event.clientX;
+  const clampedWidth = clampCitationDrawerWidth(nextWidth);
+  citationDrawerWidth.value = clampedWidth;
+  applyCitationDrawerWidth(clampedWidth);
+};
+
+const stopCitationDrawerResize = () => {
+  isCitationDrawerResizing.value = false;
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+  window.removeEventListener('mousemove', onCitationDrawerResize);
+  window.removeEventListener('mouseup', stopCitationDrawerResize);
+};
+
+const startCitationDrawerResize = (event: MouseEvent) => {
+  event.preventDefault();
+  isCitationDrawerResizing.value = true;
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'col-resize';
+  window.addEventListener('mousemove', onCitationDrawerResize);
+  window.addEventListener('mouseup', stopCitationDrawerResize);
+};
+
+const syncCitationDrawerWidthToViewport = () => {
+  const clampedWidth = clampCitationDrawerWidth(citationDrawerWidth.value);
+  citationDrawerWidth.value = clampedWidth;
+  applyCitationDrawerWidth(clampedWidth);
+};
 
 const openSourceDocumentPreview = async (group: { knowledgeId: string; title: string }) => {
   if (!group?.knowledgeId) return;
@@ -1977,6 +2034,7 @@ const onRootKeydown = (e: KeyboardEvent) => {
 };
 
 onMounted(() => {
+  window.addEventListener('resize', syncCitationDrawerWidthToViewport);
   // 使用 nextTick 确保 DOM 已渲染
   nextTick(async () => {
     const root = rootElement.value;
@@ -1995,16 +2053,25 @@ onMounted(() => {
   });
 });
 
+watch(citationDrawerVisible, async (visible) => {
+  if (!visible) return;
+  await nextTick();
+  applyCitationDrawerWidth(citationDrawerWidth.value);
+});
+
 onBeforeUnmount(() => {
+  stopCitationDrawerResize();
   const root = rootElement.value;
-  if (!root) return;
-  root.removeEventListener('click', onRootClick, true);
-  root.removeEventListener('mouseover', onHover, true);
-  root.removeEventListener('mouseout', onHoverOut, true);
+  if (root) {
+    root.removeEventListener('click', onRootClick, true);
+    root.removeEventListener('mouseover', onHover, true);
+    root.removeEventListener('mouseout', onHoverOut, true);
+  }
   window.removeEventListener('scroll', scheduleFloatClose, true);
   window.removeEventListener('resize', scheduleFloatClose, true);
-  const keydownListener: EventListener | undefined = (root as any).__citationKeydown__;
-  if (keydownListener) {
+  window.removeEventListener('resize', syncCitationDrawerWidthToViewport);
+  const keydownListener: EventListener | undefined = root ? (root as any).__citationKeydown__ : undefined;
+  if (root && keydownListener) {
     root.removeEventListener('keydown', keydownListener, true);
     delete (root as any).__citationKeydown__;
   }
@@ -3733,6 +3800,65 @@ const handleAddToKnowledge = (answerEvent: any) => {
   max-height: 250px;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.document-preview-shell {
+  position: relative;
+}
+
+:deep(.citation-preview-drawer .t-drawer__content-wrapper) {
+  width: var(--citation-drawer-width, 480px) !important;
+  max-width: calc(100vw - 24px);
+}
+
+:deep(.citation-preview-drawer .t-drawer__content) {
+  transition: none !important;
+}
+
+:deep(.citation-preview-drawer.is-resizing .t-drawer__body),
+:deep(.citation-preview-drawer.is-resizing iframe),
+:deep(.citation-preview-drawer.is-resizing img),
+:deep(.citation-preview-drawer.is-resizing object),
+:deep(.citation-preview-drawer.is-resizing embed) {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.drawer-resize-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2601;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.drawer-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -6px;
+  width: 12px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.drawer-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 72px;
+  border-radius: 999px;
+  background: var(--td-component-stroke);
+  opacity: 0.9;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.drawer-resize-handle:hover::before {
+  background: var(--td-brand-color);
+  opacity: 1;
 }
 
 /* KB citation styles - same green theme as web citations */
