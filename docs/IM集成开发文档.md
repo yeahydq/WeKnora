@@ -1,6 +1,6 @@
 # IM 集成开发文档
 
-WeKnora 的 IM 集成模块将企业即时通讯平台（企业微信、飞书、Slack、Telegram、钉钉、Mattermost）接入 WeKnora 知识问答管道，支持在 IM 中直接向 AI 提问并获得实时流式回答。
+WeKnora 的 IM 集成模块将企业即时通讯平台（企业微信、飞书、Slack、Telegram、钉钉、Mattermost、Matrix）接入 WeKnora 知识问答管道，支持在 IM 中直接向 AI 提问并获得实时流式回答。
 
 IM 渠道绑定到 Agent，一个 Agent 可接入多个 IM 渠道，所有配置通过前端 Agent 编辑器管理，存储在数据库中。
 
@@ -13,6 +13,7 @@ IM 渠道绑定到 Agent，一个 Agent 可接入多个 IM 渠道，所有配置
   - [Telegram 接入](#telegram-接入)
   - [钉钉接入](#钉钉接入)
   - [Mattermost 接入](#mattermost-接入)
+  - [Matrix 接入](#matrix-接入)
 - [前端管理](#前端管理)
 - [架构总览](#架构总览)
 - [数据模型](#数据模型)
@@ -27,6 +28,7 @@ IM 渠道绑定到 Agent，一个 Agent 可接入多个 IM 渠道，所有配置
   - [Telegram](#telegram)
   - [钉钉 (DingTalk)](#钉钉-dingtalk)
   - [Mattermost](#mattermost)
+  - [Matrix](#matrix)
 - [斜杠指令系统](#斜杠指令系统)
 - [QA 队列与限流](#qa-队列与限流)
 - [流式输出机制](#流式输出机制)
@@ -557,15 +559,16 @@ IM 渠道在 Agent 编辑器的 **IM 集成** 标签页中管理（仅编辑模�
 │   ─────┼─────────────┼─────────────┼──────────────┼─────────────┼────────   │
 │        └─────────────┼─────────────┼──────────────┘─────────────┘            │
 │                      │                                                       │
-│                 ┌────┴────────────┐                                            │
-│                 │ Mattermost      │ Webhook-only                               │
-│                 └────────┬────────┘                                            │
-│                          ▼                                                    │
-│                 ┌────────────────┐                                             │
-│                 │ Mattermost     │                                             │
-│                 │ Adapter        │                                             │
-│                 └────────┬────────┘                                             │
-│                          │                                                     │
+│                 ┌────┬───────────┴───────┐                                     │
+│                 │ Mattermost            Matrix │                               │
+│                 │ Webhook-only          Sync Poll │                            │
+│                 └────────┬───────────────┬──────┘                              │
+│                          ▼               ▼                                     │
+│                 ┌────────────────┐  ┌──────────────┐                           │
+│                 │ Mattermost     │  │ Matrix       │                           │
+│                 │ Adapter        │  │ Adapter      │                           │
+│                 └────────┬────────┘  └──────┬──────┘                           │
+│                          │                  │                                  │
 │        ──────────────────┴────────────────────────────────────────────────────│
 │                        ▼                                                     │
 │   ┌──────────────────────────────────┐                                       │
@@ -644,8 +647,11 @@ CREATE TABLE im_channels (
 | 钉钉 | WebSocket | `client_id`, `client_secret`, `card_template_id`（可选） |
 | 钉钉 | Webhook | `client_id`, `client_secret`, `card_template_id`（可选） |
 | Mattermost | Webhook（唯一支持） | `site_url`, `bot_token`, `outgoing_token`（必填）；`bot_user_id`（可选，过滤机器人自身消息） |
+| Matrix | 长轮询（在界面中选择 WebSocket） | `homeserver_url`, `access_token`；`user_id`（可选，留空时启动后自动 whoami） |
 
 `mattermost` 渠道的 `mode` 在数据库中固定为 `webhook`（创建时若未指定，服务端与模型钩子会默认 `webhook`）。`bot_identity` 形如 `mattermost:wh:{outgoing_token}`，用于防止同一出站 Webhook 重复绑定多个渠道。
+
+`matrix` 渠道在界面中复用 `websocket` 模式选项，但后端实际使用 Matrix Client-Server API 的 `/_matrix/client/v3/sync` 长轮询收取事件，不依赖公网回调地址。
 
 ### im_channel_sessions 表
 
@@ -1236,6 +1242,50 @@ Mattermost 出站 Webhook 无 Slack/Feishu 类 challenge 流程，`HandleURLVeri
 | `internal/im/mattermost/adapter.go` | 出站 Webhook 解析、Token 校验、发帖/补丁流式、文件下载 |
 | `internal/im/mattermost/client.go` | REST v4：`CreatePost`、`PatchPostMessage`、文件 info/下载 |
 | `internal/im/mattermost/form_parse.go` | 表单编码 body 与 `file_ids` 辅助解析 |
+
+---
+
+### Matrix
+
+当前 Matrix 接入采用 **长轮询** 模式：WeKnora 作为 Bot 使用 Matrix Client-Server API 持续调用 `/_matrix/client/v3/sync` 获取新消息，再通过 `send m.room.message` 发送回复。
+
+#### 接入步骤
+
+1. 在你的 Matrix homeserver 上创建或准备一个 Bot 账号。
+2. 获取该账号的 `access_token`。
+3. 在 WeKnora IM 渠道中新增 `Matrix`：
+   - **平台**：选择 `Matrix`
+   - **接入模式**：选择 `WebSocket`
+   - **Homeserver URL**：如 `https://matrix.example.com`
+   - **Access Token**：Bot 的访问令牌
+   - **Bot User ID**（可选）：如 `@weknora-bot:example.com`
+4. 保存后邀请 Bot 进入目标房间。
+
+> Matrix 在前端复用 `WebSocket` 选项，但实现上并不建立 WebSocket，而是后台使用 `/sync` 长轮询。
+
+#### 消息与回复模型
+
+- **入站消息**：仅处理 `m.room.message`
+- **文本消息**：`m.text`
+- **图片/文件**：支持 `m.image`、`m.file`，通过 `mxc://` 媒体地址下载
+- **线程**：识别 `m.thread`，将根事件映射为 `ThreadID`
+- **引用回复**：识别 `m.in_reply_to`，会额外拉取被引用事件并注入 `QuotedMessage` 供 LLM 参考
+- **流式输出**：先发送占位消息，再用 `m.replace` 发送编辑事件展示累积内容
+
+#### 限制
+
+- 暂不支持 E2EE 房间
+- 暂不支持复杂富文本（HTML / Markdown 富格式）渲染
+- 流式效果依赖客户端对消息编辑的支持，不同 Matrix 客户端体验会略有差异
+
+#### 源码文件
+
+| 文件 | 职责 |
+|------|------|
+| `internal/im/matrix/client.go` | Matrix Client-Server API 封装：`whoami` / `sync` / `send` / `event` / `media download` |
+| `internal/im/matrix/longconn.go` | `/sync` 长轮询循环与事件分发 |
+| `internal/im/matrix/event.go` | 事件解析、线程识别、引用消息构造 |
+| `internal/im/matrix/adapter.go` | `Adapter` / `StreamSender` / `FileDownloader` 实现 |
 
 ---
 

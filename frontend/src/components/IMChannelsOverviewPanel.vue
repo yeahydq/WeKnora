@@ -115,6 +115,7 @@ import slackLogo from '@/assets/img/im/slack.svg';
 import telegramLogo from '@/assets/img/im/telegram.svg';
 import dingtalkLogo from '@/assets/img/im/dingtalk.svg';
 import mattermostLogo from '@/assets/img/im/mattermost.svg';
+import matrixLogo from '@/assets/img/im/matrix.svg';
 import wechatLogo from '@/assets/img/im/wechat.svg';
 
 const PLATFORM_LOGO: Record<string, string> = {
@@ -124,6 +125,7 @@ const PLATFORM_LOGO: Record<string, string> = {
   telegram: telegramLogo,
   dingtalk: dingtalkLogo,
   mattermost: mattermostLogo,
+  matrix: matrixLogo,
   wechat: wechatLogo,
 };
 

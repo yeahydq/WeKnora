@@ -115,6 +115,9 @@
             <t-option value="mattermost" :label="$t('agentEditor.im.mattermost')">
               <span class="platform-badge mattermost" style="margin-right: 8px;">{{ $t('agentEditor.im.mattermost') }}</span>
             </t-option>
+            <t-option value="matrix" :label="$t('agentEditor.im.matrix')">
+              <span class="platform-badge matrix" style="margin-right: 8px;">{{ $t('agentEditor.im.matrix') }}</span>
+            </t-option>
             <t-option value="wechat" :label="$t('agentEditor.im.wechat')">
               <span class="platform-badge wechat" style="margin-right: 8px;">{{ $t('agentEditor.im.wechat') }}</span>
             </t-option>
@@ -132,9 +135,10 @@
           <label class="form-label">{{ $t('agentEditor.im.mode') }}</label>
           <t-radio-group v-model="formData.mode">
             <t-radio-button value="websocket" :disabled="formData.platform === 'mattermost'">WebSocket</t-radio-button>
-            <t-radio-button value="webhook">Webhook</t-radio-button>
+            <t-radio-button value="webhook" :disabled="formData.platform === 'matrix'">Webhook</t-radio-button>
           </t-radio-group>
           <p v-if="formData.platform === 'mattermost'" class="form-hint">{{ $t('agentEditor.im.mattermostModeHint') }}</p>
+          <p v-else-if="formData.platform === 'matrix'" class="form-hint">{{ $t('agentEditor.im.matrixModeHint') }}</p>
           <p v-else class="form-hint">{{ $t('agentEditor.im.modeHint') }}</p>
         </div>
 
@@ -371,6 +375,28 @@
             <p class="form-hint">{{ $t('agentEditor.im.mattermostPostToMainHint') }}</p>
           </div>
         </template>
+        <template v-if="formData.platform === 'matrix'">
+          <div class="platform-link-hint">
+            <a href="https://matrix.org/docs/" target="_blank" rel="noopener noreferrer" class="doc-link">
+              {{ $t('agentEditor.im.matrixConsole') }}
+              <t-icon name="link" class="link-icon" />
+            </a>
+            <span class="hint-text">{{ $t('agentEditor.im.consoleTip') }}</span>
+          </div>
+          <div class="form-item">
+            <label class="form-label">Homeserver URL</label>
+            <t-input v-model="formData.credentials.homeserver_url" placeholder="https://matrix.example.com" />
+          </div>
+          <div class="form-item">
+            <label class="form-label">Access Token</label>
+            <t-input v-model="formData.credentials.access_token" type="password" placeholder="syt_xxxxx" />
+          </div>
+          <div class="form-item">
+            <label class="form-label">Bot User ID</label>
+            <t-input v-model="formData.credentials.user_id" placeholder="@bot:example.com" />
+            <p class="form-hint">{{ $t('agentEditor.im.matrixUserIdHint') }}</p>
+          </div>
+        </template>
         <!-- WeChat credentials (QR code binding) -->
         <template v-if="formData.platform === 'wechat'">
           <p class="form-hint">{{ $t('agentEditor.im.wechatHint') }}</p>
@@ -456,7 +482,7 @@ let wechatPollTimer: ReturnType<typeof setTimeout> | null = null;
 const defaultCredentials = (): Record<string, any> => ({});
 
 const formData = ref({
-  platform: 'wecom' as 'wecom' | 'feishu' | 'slack' | 'telegram' | 'dingtalk' | 'mattermost' | 'wechat',
+  platform: 'wecom' as 'wecom' | 'feishu' | 'slack' | 'telegram' | 'dingtalk' | 'mattermost' | 'matrix' | 'wechat',
   name: '',
   mode: 'websocket' as 'webhook' | 'websocket' | 'longpoll',
   output_mode: 'stream' as 'stream' | 'full',
@@ -471,7 +497,7 @@ function platformLabel(platform: string): string {
 }
 
 function platformSupportsThread(platform: string): boolean {
-  return ['slack', 'mattermost', 'feishu', 'telegram'].includes(platform);
+  return ['slack', 'mattermost', 'feishu', 'telegram', 'matrix'].includes(platform);
 }
 
 watch(
@@ -482,6 +508,9 @@ watch(
       if (typeof formData.value.credentials.post_to_main !== 'boolean') {
         formData.value.credentials.post_to_main = false;
       }
+    }
+    if (p === 'matrix') {
+      formData.value.mode = 'websocket';
     }
     if (!platformSupportsThread(p)) {
       formData.value.session_mode = 'user';
@@ -874,6 +903,11 @@ onUnmounted(() => {
   &.mattermost {
     background: rgba(25, 42, 77, 0.08);
     color: #192a4d;
+  }
+
+  &.matrix {
+    background: rgba(14, 161, 125, 0.1);
+    color: #0ea17d;
   }
 
   &.wechat {

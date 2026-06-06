@@ -17,6 +17,7 @@ const (
 	PlatformTelegram   Platform = "telegram"
 	PlatformDingtalk   Platform = "dingtalk"
 	PlatformMattermost Platform = "mattermost"
+	PlatformMatrix     Platform = "matrix"
 	PlatformWeChat     Platform = "wechat"
 )
 

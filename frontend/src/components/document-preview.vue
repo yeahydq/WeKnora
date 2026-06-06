@@ -9,6 +9,7 @@ import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
 import { useI18n } from 'vue-i18n';
 import { sanitizeHTML, safeMarkdownToHTML } from '@/utils/security';
+import { preprocessMathDelimiters } from '@/utils/markdownMath';
 
 
 const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx'));
@@ -105,15 +106,6 @@ function getHighlightLang(ft: string): string {
   const lower = ft?.toLowerCase() || '';
   return langMap[lower] || lower;
 }
-
-const preprocessMathDelimiters = (rawText: string): string => {
-  if (!rawText || typeof rawText !== 'string') {
-    return '';
-  }
-  return rawText
-    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-    .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
-};
 
 async function renderDocx(blob: Blob) {
   const { renderAsync } = await import('docx-preview');

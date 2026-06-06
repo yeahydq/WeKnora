@@ -7,7 +7,7 @@ source: IM集成开发文档.md
 
 # IM 集成开发
 
-WeKnora 的 IM 集成模块将企业即时通讯平台（企业微信、飞书、Slack、Telegram、钉钉、Mattermost）接入 WeKnora 知识问答管道，支持在 IM 中直接向 AI 提问并获得实时流式回答。
+WeKnora 的 IM 集成模块将企业即时通讯平台（企业微信、飞书、Slack、Telegram、钉钉、Mattermost、Matrix）接入 WeKnora 知识问答管道，支持在 IM 中直接向 AI 提问并获得实时流式回答。
 
 IM 渠道绑定到 Agent，一个 Agent 可接入多个 IM 渠道。
 
@@ -23,6 +23,7 @@ IM 渠道绑定到 Agent，一个 Agent 可接入多个 IM 渠道。
 | Telegram | ✅ (长轮询) | ✅ | ✅ |
 | 钉钉 | ✅ (Stream) | ✅ | ✅ (AI 卡片) |
 | Mattermost | — | ✅ | ✅ |
+| Matrix | ✅ (`/sync` 长轮询，界面中复用 WebSocket 选项) | — | ✅（消息编辑） |
 
 ## 快速接入指南
 

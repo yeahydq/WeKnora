@@ -27,6 +27,7 @@ const (
 	ChannelFeishu           = "feishu"            // Feishu / Lark
 	ChannelDingtalk         = "dingtalk"          // DingTalk
 	ChannelSlack            = "slack"             // Slack
+	ChannelMatrix           = "matrix"            // Matrix
 	ChannelIM               = "im"                // Generic IM channel
 	ChannelNotion           = "notion"            // Notion
 	ChannelYuque            = "yuque"             // Yuque (语雀)

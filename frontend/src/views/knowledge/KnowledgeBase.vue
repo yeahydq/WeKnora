@@ -350,6 +350,7 @@ const sourceOptions = computed(() => [
   { label: t('knowledgeBase.channelWecom'), value: 'wecom' },
   { label: t('knowledgeBase.channelDingtalk'), value: 'dingtalk' },
   { label: t('knowledgeBase.channelSlack'), value: 'slack' },
+  { label: t('knowledgeBase.channelMatrix'), value: 'matrix' },
   { label: t('knowledgeBase.channelIm'), value: 'im' },
 ]);
 // Date range as [start, end] in "YYYY-MM-DD" form (t-date-range-picker default).
@@ -436,6 +437,7 @@ const channelLabelMap: Record<string, string> = {
   feishu: 'knowledgeBase.channelFeishu',
   dingtalk: 'knowledgeBase.channelDingtalk',
   slack: 'knowledgeBase.channelSlack',
+  matrix: 'knowledgeBase.channelMatrix',
   im: 'knowledgeBase.channelIm',
 };
 

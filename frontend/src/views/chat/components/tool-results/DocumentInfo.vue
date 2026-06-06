@@ -97,6 +97,7 @@ const channelLabelMap: Record<string, string> = {
   feishu: 'knowledgeBase.channelFeishu',
   dingtalk: 'knowledgeBase.channelDingtalk',
   slack: 'knowledgeBase.channelSlack',
+  matrix: 'knowledgeBase.channelMatrix',
   im: 'knowledgeBase.channelIm',
 };
 

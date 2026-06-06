@@ -3,6 +3,8 @@ package skills
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/Tencent/WeKnora/internal/sandbox"
@@ -210,8 +212,40 @@ func (m *Manager) ExecuteScript(ctx context.Context, skillName, scriptPath strin
 		Stdin:   stdin,
 	}
 
+	m.applySkillRuntimeOptions(skillName, config)
+
 	// Execute in sandbox
 	return m.sandboxMgr.Execute(ctx, config)
+}
+
+func (m *Manager) applySkillRuntimeOptions(skillName string, config *sandbox.ExecuteConfig) {
+	if config == nil {
+		return
+	}
+
+	// EduComp skills are read-only integrations. They need network access and a
+	// narrowly scoped set of environment variables to reach EduComp endpoints
+	// configured on the WeKnora server side.
+	if strings.HasPrefix(skillName, "educomp-") {
+		config.AllowNetwork = true
+		if config.Env == nil {
+			config.Env = make(map[string]string)
+		}
+
+		config.Env["PYTHONUNBUFFERED"] = "1"
+
+		for _, key := range []string{
+			"EDUCOMP_ENDPOINTS_JSON",
+			"EDUCOMP_BASE_URL",
+			"EDUCOMP_API_KEY",
+			"WEKNORA_EDUCOMP_DEFAULT_ENDPOINT_ID",
+			"TZ",
+		} {
+			if value := os.Getenv(key); value != "" {
+				config.Env[key] = value
+			}
+		}
+	}
 }
 
 // GetSkillInfo returns detailed information about a skill

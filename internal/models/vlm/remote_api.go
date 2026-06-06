@@ -74,7 +74,7 @@ func NewRemoteAPIVLM(config *Config) (*RemoteAPIVLM, error) {
 // Predict sends an image with a text prompt to the OpenAI-compatible API.
 func (v *RemoteAPIVLM) Predict(ctx context.Context, imgBytesList [][]byte, prompt string) (string, error) {
 	var parts []openai.ChatMessagePart
-	
+
 	// Add text prompt first
 	parts = append(parts, openai.ChatMessagePart{
 		Type: openai.ChatMessagePartTypeText,
@@ -105,8 +105,15 @@ func (v *RemoteAPIVLM) Predict(ctx context.Context, imgBytesList [][]byte, promp
 				MultiContent: parts,
 			},
 		},
-		MaxTokens:   defaultMaxToks,
-		Temperature: defaultTemp,
+	}
+
+	// GPT-5 / o-series VLM models reject max_tokens and require
+	// max_completion_tokens instead. They also reject non-default sampling params.
+	if provider.IsOpenAIReasoningOrGPT5Model(v.modelName) {
+		req.MaxCompletionTokens = defaultMaxToks
+	} else {
+		req.MaxTokens = defaultMaxToks
+		req.Temperature = defaultTemp
 	}
 
 	totalImageSize := 0

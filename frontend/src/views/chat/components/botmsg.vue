@@ -60,7 +60,7 @@
 </template>
 <script setup>
 import { onMounted, onBeforeUnmount, watch, computed, ref, reactive, defineProps, nextTick, onUpdated } from 'vue';
-import { marked } from 'marked';
+import { Marked, marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
 import docInfo from './docInfo.vue';
@@ -82,27 +82,20 @@ import {
     ensureMermaidInitialized,
     renderMermaidInContainer
 } from '@/utils/mermaidShared';
-
-marked.use({
-    breaks: true,  // 全局启用单个换行支持
-});
-
-marked.use(markedKatex({ throwOnError: false, nonStandard: true }));
-
-const preprocessMathDelimiters = (rawText) => {
-    if (!rawText || typeof rawText !== 'string') {
-        return '';
-    }
-    return rawText
-        .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-        .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
-};
+import { preprocessMathDelimiters } from '@/utils/markdownMath';
 
 ensureMermaidInitialized();
 
 const emit = defineEmits(['scroll-bottom'])
 const { t } = useI18n()
 const uiStore = useUIStore();
+const markdownParser = new Marked();
+markdownParser.use({
+    breaks: true,
+    gfm: true,
+});
+markdownParser.use(markedKatex({ throwOnError: false, nonStandard: true }));
+
 const renderer = new marked.Renderer();
 let parentMd = ref()
 let reviewUrl = ref('')
@@ -170,7 +163,7 @@ const renderedHTML = computed(() => {
     const processed = replaceIncompleteImageWithPlaceholder(text);
     const safeText = preprocessMathDelimiters(processed);
     const safeMarkdown = safeMarkdownToHTML(safeText);
-    const html = marked.parse(safeMarkdown, { renderer: customRenderer, breaks: true });
+    const html = markdownParser.parse(safeMarkdown, { renderer: customRenderer, breaks: true });
     return sanitizeHTML(html);
 });
 

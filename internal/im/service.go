@@ -181,6 +181,9 @@ const (
 	wsLeaderRetryInterval = 10 * time.Second
 	// stopMarkerTTL is the TTL for cross-instance /stop markers in Redis.
 	stopMarkerTTL = 30 * time.Second
+	// recentImageTTL is how long a just-uploaded image remains available for
+	// the next follow-up text question to use as direct vision context.
+	recentImageTTL = 10 * time.Minute
 	// stopPollInterval is how often in-flight workers check for remote /stop signals.
 	stopPollInterval = 500 * time.Millisecond
 )
@@ -189,13 +192,14 @@ const (
 // All IM-related Redis keys are defined here for discoverability and to avoid
 // scattered string literals across multiple files.
 const (
-	RedisKeyLeader     = "im:ws:leader:"    // + channelID — WebSocket leader election
-	RedisKeyDedup      = "im:dedup:"        // + messageID — message deduplication
-	RedisKeyStop       = "im:stop:"         // + userKey   — cross-instance /stop marker (pre-execution)
-	RedisKeyInflight   = "im:inflight:"     // + userKey   — maps userKey → sessionID:messageID for cross-instance /stop
-	RedisKeyQueueUser  = "im:queue:user:"   // + userKey   — global per-user queue counter
-	RedisKeyRateLimit  = "im:ratelimit:"    // + key       — sliding-window rate limiting
-	RedisKeyGlobalGate = "im:global:active" // global concurrent worker counter
+	RedisKeyLeader      = "im:ws:leader:"    // + channelID — WebSocket leader election
+	RedisKeyDedup       = "im:dedup:"        // + messageID — message deduplication
+	RedisKeyStop        = "im:stop:"         // + userKey   — cross-instance /stop marker (pre-execution)
+	RedisKeyInflight    = "im:inflight:"     // + userKey   — maps userKey → sessionID:messageID for cross-instance /stop
+	RedisKeyRecentImage = "im:recent:image:" // + userKey   — latest uploaded image URL for follow-up vision QA
+	RedisKeyQueueUser   = "im:queue:user:"   // + userKey   — global per-user queue counter
+	RedisKeyRateLimit   = "im:ratelimit:"    // + key       — sliding-window rate limiting
+	RedisKeyGlobalGate  = "im:global:active" // global concurrent worker counter
 )
 
 // channelState holds runtime state for a running IM channel.
@@ -215,6 +219,11 @@ type inflightEntry struct {
 	cancel             context.CancelFunc
 	sessionID          string // set after assistant message is created
 	assistantMessageID string // set after assistant message is created
+}
+
+type recentImageEntry struct {
+	URL       string
+	ExpiresAt time.Time
 }
 
 // Service orchestrates IM message handling:
@@ -265,6 +274,9 @@ type Service struct {
 	// ("channelID:userID:chatID"). Allows /stop to abort a running request
 	// on this instance and look up (sessionID, messageID) for StreamManager.
 	inflight sync.Map // userKey -> *inflightEntry
+
+	// recentImages stores the latest uploaded image URL per userKey when Redis is unavailable.
+	recentImages sync.Map // userKey -> recentImageEntry
 
 	// qaQueue manages bounded queuing and worker-pool execution of QA requests,
 	// providing backpressure to protect downstream LLM resources.
@@ -340,6 +352,7 @@ func buildIMQARequest(
 	userMessageID string,
 	customAgent *types.CustomAgent,
 	kbIDs []string,
+	imageURLs []string,
 	quote *QuotedMessage,
 ) *types.QARequest {
 	// WebSearchEnabled: the web handler passes this per-request from the
@@ -353,6 +366,7 @@ func buildIMQARequest(
 		AssistantMessageID: assistantMessageID,
 		CustomAgent:        customAgent,
 		KnowledgeBaseIDs:   kbIDs,
+		ImageURLs:          imageURLs,
 		UserMessageID:      userMessageID,
 		WebSearchEnabled:   webSearchEnabled,
 		QuotedContext:      quotedContext,
@@ -794,6 +808,101 @@ func (s *Service) loadInflightMapping(ctx context.Context, userKey string) (sess
 	return parts[0], parts[1], true
 }
 
+func (s *Service) cacheRecentImage(ctx context.Context, adapter Adapter, msg *IncomingMessage, tenantID uint64, userKey string) error {
+	downloader, ok := adapter.(FileDownloader)
+	if !ok {
+		return fmt.Errorf("adapter does not support file download")
+	}
+
+	tenant, err := s.tenantService.GetTenantByID(ctx, tenantID)
+	if err != nil {
+		return fmt.Errorf("get tenant: %w", err)
+	}
+	fileSvc := buildTenantFileService(tenant)
+	if fileSvc == nil {
+		return fmt.Errorf("build tenant file service: nil")
+	}
+
+	reader, fileName, err := downloader.DownloadFile(ctx, msg)
+	if err != nil {
+		return fmt.Errorf("download image: %w", err)
+	}
+	defer reader.Close()
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("read image: %w", err)
+	}
+	if strings.TrimSpace(fileName) == "" {
+		fileName = "im-image"
+	}
+
+	storedName := fmt.Sprintf("chat-images/%s-%s", uuid.New().String(), sanitizeFileName(fileName))
+	imageURL, err := fileSvc.SaveBytes(ctx, data, tenantID, storedName, false)
+	if err != nil {
+		return fmt.Errorf("save image bytes: %w", err)
+	}
+
+	return s.storeRecentImage(ctx, userKey, imageURL)
+}
+
+func (s *Service) storeRecentImage(ctx context.Context, userKey, imageURL string) error {
+	if strings.TrimSpace(userKey) == "" || strings.TrimSpace(imageURL) == "" {
+		return nil
+	}
+	if s.redis != nil {
+		return s.redis.Set(ctx, RedisKeyRecentImage+userKey, imageURL, recentImageTTL).Err()
+	}
+	s.recentImages.Store(userKey, recentImageEntry{
+		URL:       imageURL,
+		ExpiresAt: time.Now().Add(recentImageTTL),
+	})
+	return nil
+}
+
+func (s *Service) consumeRecentImagesForQuery(ctx context.Context, userKey string) []string {
+	imageURL := s.takeRecentImage(ctx, userKey)
+	if imageURL == "" {
+		return nil
+	}
+	return []string{imageURL}
+}
+
+func (s *Service) takeRecentImage(ctx context.Context, userKey string) string {
+	if strings.TrimSpace(userKey) == "" {
+		return ""
+	}
+	if s.redis != nil {
+		key := RedisKeyRecentImage + userKey
+		val, err := s.redis.Get(ctx, key).Result()
+		if err != nil {
+			return ""
+		}
+		s.redis.Del(ctx, key)
+		return strings.TrimSpace(val)
+	}
+	raw, ok := s.recentImages.Load(userKey)
+	if !ok {
+		return ""
+	}
+	s.recentImages.Delete(userKey)
+	entry, ok := raw.(recentImageEntry)
+	if !ok || time.Now().After(entry.ExpiresAt) {
+		return ""
+	}
+	return strings.TrimSpace(entry.URL)
+}
+
+func sanitizeFileName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "image"
+	}
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	return name
+}
+
 // writeStopEvent writes a stop event to StreamManager, matching the web
 // StopSession pattern. The QA watcher goroutine detects it and cancels.
 func (s *Service) writeStopEvent(ctx context.Context, sessionID, messageID string) {
@@ -984,6 +1093,12 @@ func (s *Service) HandleMessage(ctx context.Context, msg *IncomingMessage, chann
 	// If the message is a file or image and the channel has a knowledge_base_id configured,
 	// handle it separately without entering the QA pipeline.
 	if (msg.MessageType == MessageTypeFile || msg.MessageType == MessageTypeImage) && channel.KnowledgeBaseID != "" {
+		if msg.MessageType == MessageTypeImage {
+			userKey := makeUserKey(channelID, msg.UserID, msg.ChatID, threadID)
+			if err := s.cacheRecentImage(ctx, adapter, msg, tenantID, userKey); err != nil {
+				logger.Warnf(ctx, "[IM] Failed to cache recent image for vision QA: %v", err)
+			}
+		}
 		return s.handleFileMessage(ctx, msg, adapter, channel)
 	}
 
@@ -1818,7 +1933,8 @@ func (s *Service) handleMessageStream(ctx context.Context, msg *IncomingMessage,
 	// Run QA async
 	go func() {
 		var err error
-		req := buildIMQARequest(session, msg.Content, assistantMsg.ID, userMsg.ID, customAgent, kbIDs, msg.Quote)
+		imageURLs := s.consumeRecentImagesForQuery(qaCtx, userKey)
+		req := buildIMQARequest(session, msg.Content, assistantMsg.ID, userMsg.ID, customAgent, kbIDs, imageURLs, msg.Quote)
 		if req.QuotedContext != "" {
 			logger.Debugf(qaCtx, "[IM] QuotedContext set: length=%d", len(req.QuotedContext))
 		}
@@ -2029,7 +2145,8 @@ func (s *Service) runQA(ctx context.Context, session *types.Session, query strin
 	// Run QA async
 	go func() {
 		var err error
-		req := buildIMQARequest(session, query, assistantMsg.ID, userMsg.ID, customAgent, kbIDs, quote)
+		imageURLs := s.consumeRecentImagesForQuery(ctx, userKey)
+		req := buildIMQARequest(session, query, assistantMsg.ID, userMsg.ID, customAgent, kbIDs, imageURLs, quote)
 		if req.QuotedContext != "" {
 			logger.Debugf(ctx, "[IM] QuotedContext set: length=%d", len(req.QuotedContext))
 		}
@@ -2350,12 +2467,16 @@ func (s *Service) processFileToKnowledgeBase(ctx context.Context, msg *IncomingM
 	}
 
 	logger.Infof(ctx, "[IM] File saved to knowledge base: kb=%s knowledge=%s file=%s", kbID, knowledge.ID, fileName)
-	s.sendFileResult(ctx, adapter, msg, fileName, true, "", channel)
+	if msg.MessageType != MessageTypeImage {
+		s.sendFileResult(ctx, adapter, msg, fileName, true, "", channel)
+	}
 
 	// Start a background watcher to send the document summary once Asynq
 	// finishes parsing + summary generation. This is intentionally decoupled
 	// from the Asynq task pipeline to avoid modifying any existing logic.
-	go s.watchAndSendSummary(ctx, kbCtx, adapter, msg, knowledge.ID, fileName, channel)
+	if msg.MessageType != MessageTypeImage {
+		go s.watchAndSendSummary(ctx, kbCtx, adapter, msg, knowledge.ID, fileName, channel)
+	}
 }
 
 // sendFileResult sends a notification about the file processing result.
@@ -2703,6 +2824,8 @@ func imPlatformToChannel(platform string) string {
 		return types.ChannelDingtalk
 	case "slack":
 		return types.ChannelSlack
+	case "matrix":
+		return types.ChannelMatrix
 	default:
 		return types.ChannelIM
 	}

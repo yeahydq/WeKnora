@@ -12,6 +12,7 @@ import { downKnowledgeDetails, deleteGeneratedQuestion, getChunkByIdOnly, previe
 import { MessagePlugin, DialogPlugin } from "tdesign-vue-next";
 import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hydrateProtectedFileImages, isValidURL } from '@/utils/security';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
+import { preprocessMathDelimiters } from '@/utils/markdownMath';
 import { useI18n } from 'vue-i18n';
 import DocumentPreview from '@/components/document-preview.vue';
 
@@ -56,15 +57,6 @@ marked.use({
   gfm: true,         // 启用 GitHub Flavored Markdown
 });
 marked.use(markedKatex({ throwOnError: false, nonStandard: true }));
-
-const preprocessMathDelimiters = (rawText: string): string => {
-  if (!rawText || typeof rawText !== 'string') {
-    return '';
-  }
-  return rawText
-    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-    .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
-};
 const renderer = new marked.Renderer();
 let page = 1;
 let loadingChunks = false;
@@ -496,6 +488,7 @@ const channelLabelMap: Record<string, string> = {
   feishu: 'knowledgeBase.channelFeishu',
   dingtalk: 'knowledgeBase.channelDingtalk',
   slack: 'knowledgeBase.channelSlack',
+  matrix: 'knowledgeBase.channelMatrix',
   im: 'knowledgeBase.channelIm',
 };
 

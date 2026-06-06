@@ -1,6 +1,8 @@
 package im
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -135,6 +137,15 @@ func (ch *IMChannel) computeBotIdentity() string {
 	case "mattermost":
 		if tok := str("outgoing_token"); tok != "" {
 			return "mattermost:wh:" + tok
+		}
+	case "matrix":
+		home := str("homeserver_url")
+		if userID := str("user_id"); userID != "" {
+			return "matrix:" + home + ":" + userID
+		}
+		if tok := str("access_token"); tok != "" {
+			sum := sha256.Sum256([]byte(tok))
+			return "matrix:" + home + ":tok:" + hex.EncodeToString(sum[:8])
 		}
 	case "wechat":
 		if botID := str("ilink_bot_id"); botID != "" {

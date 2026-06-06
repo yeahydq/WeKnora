@@ -504,7 +504,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { marked } from 'marked';
+import { Marked, marked } from 'marked';
 import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
@@ -533,6 +533,7 @@ import {
   ensureMermaidInitialized,
   renderMermaidInContainer,
 } from '@/utils/mermaidShared';
+import { preprocessMathDelimiters } from '@/utils/markdownMath';
 
 const router = useRouter();
 const route = useRoute();
@@ -776,7 +777,7 @@ const wikiDrawerContent = computed(() => {
     return `<a href="#" class="wiki-content-link citation-wiki" data-slug="${escapeHtml(slug)}">${escapeHtml(display)}</a>`;
   });
 
-  return marked.parse(preprocessed, { breaks: true, async: false }) as string;
+  return markdownParser.parse(preprocessed, { breaks: true, async: false }) as string;
 });
 
 type SourceRefDisplay = {
@@ -1048,18 +1049,11 @@ const props = defineProps<{
   userQuery?: string;
 }>();
 
-// Configure marked for security
-marked.use({});
-marked.use(markedKatex({ throwOnError: false, nonStandard: true }));
-
-const preprocessMathDelimiters = (rawText: string): string => {
-  if (!rawText || typeof rawText !== 'string') {
-    return '';
-  }
-  return rawText
-    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-    .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
-};
+// Use a component-local parser so global marked extensions from other views
+// cannot interfere with chat math rendering.
+const markdownParser = new Marked();
+markdownParser.use({ breaks: true, gfm: true });
+markdownParser.use(markedKatex({ throwOnError: false, nonStandard: true }));
 
 // Event stream
 const eventStream = computed(() => props.session?.agentEventStream || []);
@@ -2194,7 +2188,7 @@ const renderMarkdownContent = (content: any): string => {
   const mathSafe = preprocessMathDelimiters(sanitized);
   const imageSafe = replaceIncompleteImageWithPlaceholder(mathSafe);
   const { content: markdownWithPlaceholders, htmlSnippets } = extractRenderableHtmlPlaceholders(imageSafe);
-  const html = marked.parse(markdownWithPlaceholders, { renderer: agentRenderer }) as string;
+  const html = markdownParser.parse(markdownWithPlaceholders, { renderer: agentRenderer }) as string;
   const htmlWithCitations = restoreRenderableHtmlPlaceholders(html, htmlSnippets);
   const protectedHTML = protectProviderImageSrcInHTML(htmlWithCitations);
   return DOMPurify.sanitize(protectedHTML, DOMPurifyConfig);
@@ -2218,7 +2212,7 @@ const renderMarkdown = (content: any): string => {
     const mathSafe = preprocessMathDelimiters(contentStr);
     const imageSafe = replaceIncompleteImageWithPlaceholder(mathSafe);
     const { content: markdownWithPlaceholders, htmlSnippets } = extractRenderableHtmlPlaceholders(imageSafe);
-    const html = marked.parse(markdownWithPlaceholders, { renderer: agentRenderer }) as string;
+    const html = markdownParser.parse(markdownWithPlaceholders, { renderer: agentRenderer }) as string;
     if (!html) return '';
 
     const htmlWithCitations = restoreRenderableHtmlPlaceholders(html, htmlSnippets);

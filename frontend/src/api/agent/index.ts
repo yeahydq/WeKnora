@@ -246,7 +246,7 @@ export interface IMChannel {
   id: string;
   tenant_id?: number;
   agent_id: string;
-  platform: 'wecom' | 'feishu' | 'slack' | 'telegram' | 'dingtalk' | 'mattermost' | 'wechat';
+  platform: 'wecom' | 'feishu' | 'slack' | 'telegram' | 'dingtalk' | 'mattermost' | 'matrix' | 'wechat';
   name: string;
   enabled: boolean;
   mode: 'webhook' | 'websocket' | 'longpoll';

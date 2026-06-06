@@ -1,0 +1,14 @@
+services:
+  embedding-service:
+    image: embedding-service-embedding-service:latest
+    container_name: embedding-service
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8100:8100"
+
+  rerank-service:
+    image: rerank-service-rerank-service:latest
+    container_name: rerank-service
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8101:8101"

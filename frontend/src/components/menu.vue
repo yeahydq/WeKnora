@@ -68,7 +68,7 @@
                      :class="['menu_item', item.childrenPath && item.childrenPath == currentpath ? 'menu_item_c_active' : isMenuItemActive(item.path) ? 'menu_item_active' : '']">
                     <div class="menu_item-box">
                         <div class="menu_icon">
-                            <img class="icon" :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)" alt="">
+                            <img class="icon" :src="getImgSrc(resolveMenuIcon(item.icon))" alt="">
                         </div>
                         <template v-if="!uiStore.sidebarCollapsed">
                             <span class="menu_title" :title="item.title">{{ item.title }}</span>
@@ -181,6 +181,7 @@ import slackLogo from '@/assets/img/im/slack.svg';
 import telegramLogo from '@/assets/img/im/telegram.svg';
 import dingtalkLogo from '@/assets/img/im/dingtalk.svg';
 import mattermostLogo from '@/assets/img/im/mattermost.svg';
+import matrixLogo from '@/assets/img/im/matrix.svg';
 import wechatLogo from '@/assets/img/im/wechat.svg';
 
 const PLATFORM_LOGO: Record<string, string> = {
@@ -190,6 +191,7 @@ const PLATFORM_LOGO: Record<string, string> = {
     telegram: telegramLogo,
     dingtalk: dingtalkLogo,
     mattermost: mattermostLogo,
+    matrix: matrixLogo,
     wechat: wechatLogo,
 };
 
@@ -777,6 +779,23 @@ let pathPrefix = ref(route.name)
 
       // 退出图标：始终显示默认
       logoutIcon.value = 'logout.svg';
+}
+
+const resolveMenuIcon = (icon: string) => {
+    switch (icon) {
+        case 'zhishiku':
+            return knowledgeIcon.value;
+        case 'agent':
+            return agentIcon.value;
+        case 'organization':
+            return organizationIcon.value;
+        case 'logout':
+            return logoutIcon.value;
+        case 'setting':
+            return settingIcon.value;
+        default:
+            return prefixIcon.value;
+    }
 }
 getIcon(typeof route.name === 'string' ? route.name as string : (route.name ? String(route.name) : ''))
 const handleMenuClick = async (path: string) => {

@@ -14,7 +14,7 @@ import (
 // validIMPlatforms is the set of supported IM platforms.
 var validIMPlatforms = map[string]bool{
 	"wecom": true, "feishu": true, "slack": true, "telegram": true, "dingtalk": true, "mattermost": true,
-	"wechat": true,
+	"matrix": true, "wechat": true,
 }
 
 // IMHandler handles IM platform callback requests and channel CRUD.
@@ -50,6 +50,7 @@ func (h *IMHandler) CreateIMChannel(c *gin.Context) {
 		Name            string     `json:"name"`
 		Mode            string     `json:"mode"`
 		OutputMode      string     `json:"output_mode"`
+		SessionMode     string     `json:"session_mode"`
 		KnowledgeBaseID string     `json:"knowledge_base_id"`
 		Credentials     types.JSON `json:"credentials"`
 		Enabled         *bool      `json:"enabled"`
@@ -60,7 +61,7 @@ func (h *IMHandler) CreateIMChannel(c *gin.Context) {
 	}
 
 	if !validIMPlatforms[req.Platform] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "platform must be 'wecom', 'feishu', 'slack', 'telegram', 'dingtalk', 'mattermost' or 'wechat'"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "platform must be 'wecom', 'feishu', 'slack', 'telegram', 'dingtalk', 'mattermost', 'matrix' or 'wechat'"})
 		return
 	}
 
@@ -71,6 +72,7 @@ func (h *IMHandler) CreateIMChannel(c *gin.Context) {
 		Name:            req.Name,
 		Mode:            req.Mode,
 		OutputMode:      req.OutputMode,
+		SessionMode:     req.SessionMode,
 		KnowledgeBaseID: req.KnowledgeBaseID,
 		Credentials:     req.Credentials,
 		Enabled:         true,
@@ -193,6 +195,7 @@ func (h *IMHandler) UpdateIMChannel(c *gin.Context) {
 		Name            *string    `json:"name"`
 		Mode            *string    `json:"mode"`
 		OutputMode      *string    `json:"output_mode"`
+		SessionMode     *string    `json:"session_mode"`
 		KnowledgeBaseID *string    `json:"knowledge_base_id"`
 		Credentials     types.JSON `json:"credentials"`
 		Enabled         *bool      `json:"enabled"`
@@ -210,6 +213,9 @@ func (h *IMHandler) UpdateIMChannel(c *gin.Context) {
 	}
 	if req.OutputMode != nil {
 		channel.OutputMode = *req.OutputMode
+	}
+	if req.SessionMode != nil {
+		channel.SessionMode = *req.SessionMode
 	}
 	if req.KnowledgeBaseID != nil {
 		channel.KnowledgeBaseID = *req.KnowledgeBaseID

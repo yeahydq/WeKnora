@@ -104,6 +104,7 @@ import {
   renderMermaidInContainer,
   createMermaidCodeRenderer,
 } from '@/utils/mermaidShared';
+import { preprocessMathDelimiters } from '@/utils/markdownMath';
 
 // Configure marked
 marked.use({ breaks: true, gfm: true });
@@ -115,13 +116,6 @@ mermaidRenderer.code = createMermaidCodeRenderer('mermaid-test');
 ensureMermaidInitialized();
 
 const mermaidContainer = ref<HTMLElement | null>(null);
-
-const preprocessMathDelimiters = (rawText: string): string => {
-  if (!rawText) return '';
-  return rawText
-    .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
-    .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
-};
 
 const render = (raw: string): string => {
   if (!raw) return '';

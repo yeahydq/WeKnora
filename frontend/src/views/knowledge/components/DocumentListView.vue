@@ -73,6 +73,7 @@ const getSourceInfo = (item: KnowledgeItem): { icon: string; label: string } => 
   if (ch === 'wecom') return { icon: 'cloud-download', label: t('knowledgeBase.channelWecom') };
   if (ch === 'dingtalk') return { icon: 'cloud-download', label: t('knowledgeBase.channelDingtalk') };
   if (ch === 'slack') return { icon: 'cloud-download', label: t('knowledgeBase.channelSlack') };
+  if (ch === 'matrix') return { icon: 'cloud-download', label: t('knowledgeBase.channelMatrix') };
   if (ch === 'im') return { icon: 'cloud-download', label: t('knowledgeBase.channelIm') };
   if (item.type === 'url') return { icon: 'link', label: t('knowledgeBase.channelUrl') };
   if (item.type === 'manual') return { icon: 'edit', label: t('knowledgeBase.channelManual') };
