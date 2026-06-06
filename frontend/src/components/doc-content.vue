@@ -348,7 +348,14 @@ const runMarkdownPostRenderPipeline = async () => {
     images.forEach(async item => {
       const isValid = await checkImage(item.src);
       if (!isValid) {
-        item.remove();
+        const fallbackSrc = item.getAttribute('data-protected-src');
+        if (fallbackSrc && isValidURL(fallbackSrc)) {
+          const requestURL = /^(local|minio|cos|tos|s3|oss|ks3):\/\//.test(fallbackSrc)
+            ? `/files?${new URLSearchParams({ file_path: fallbackSrc }).toString()}`
+            : fallbackSrc;
+          item.src = requestURL;
+          return;
+        }
       }
     })
   }

@@ -862,7 +862,7 @@ const openWikiDrawer = async (kbId: string, slug: string) => {
 };
 
 const openKbCitationDrawer = async (kbId: string, chunkId: string, knowledgeTitle: string) => {
-  if (!kbId || !chunkId) return;
+  if (!chunkId) return;
 
   floatPopup.value.visible = false;
   floatPopup.value.pinned = false;
@@ -882,6 +882,9 @@ const openKbCitationDrawer = async (kbId: string, chunkId: string, knowledgeTitl
     const chunkRes: any = await getChunkByIdOnly(chunkId);
     const chunk = chunkRes?.data || chunkRes || {};
     const knowledgeId = chunk.knowledge_id || kbId;
+    if (!knowledgeId) {
+      throw new Error(t('agentStream.citation.notFound'));
+    }
     citationDrawerKnowledgeId.value = knowledgeId;
 
     const knowledgeRes: any = await getKnowledgeDetails(knowledgeId);
@@ -1886,13 +1889,13 @@ const onRootClick = (e: Event) => {
   
   // Handle KB citation clicks -> navigate to KB detail page
   const kbEl = target.closest?.('.citation-kb') as HTMLElement | null;
-  if (kbEl && kbEl.getAttribute('data-kb-id')) {
+  if (kbEl) {
     e.preventDefault();
     e.stopPropagation();
-    const kbId = kbEl.getAttribute('data-kb-id');
+    const kbId = kbEl.getAttribute('data-kb-id') || '';
     const chunkId = kbEl.getAttribute('data-chunk-id') || '';
     const knowledgeTitle = kbEl.getAttribute('data-doc') || '';
-    if (kbId && chunkId) openKbCitationDrawer(kbId, chunkId, knowledgeTitle);
+    if (chunkId) openKbCitationDrawer(kbId, chunkId, knowledgeTitle);
     return;
   }
   
@@ -1948,8 +1951,8 @@ const onRootKeydown = (e: KeyboardEvent) => {
       e.preventDefault();
       const chunkId = kbEl.getAttribute('data-chunk-id') || '';
       const knowledgeTitle = kbEl.getAttribute('data-doc') || '';
-      const kbId = kbEl.getAttribute('data-kb-id');
-      if (kbId && chunkId) openKbCitationDrawer(kbId, chunkId, knowledgeTitle);
+      const kbId = kbEl.getAttribute('data-kb-id') || '';
+      if (chunkId) openKbCitationDrawer(kbId, chunkId, knowledgeTitle);
     }
     return;
   }

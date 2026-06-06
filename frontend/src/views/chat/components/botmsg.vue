@@ -56,6 +56,37 @@
             <div v-if="isImgLoading" class="img_loading"><t-loading size="small"></t-loading><span>{{ $t('common.loading') }}</span></div>
         </div>
         <picturePreview :reviewImg="reviewImg" :reviewUrl="reviewUrl" @closePreImg="closePreImg"></picturePreview>
+        <t-drawer
+            v-model:visible="previewVisible"
+            :header="previewTitle"
+            size="82vw"
+            placement="right"
+            attach="body"
+            :show-overlay="true"
+            :close-btn="true"
+            :close-on-overlay-click="true"
+            :footer="false"
+        >
+            <div class="document-preview-shell">
+                <div v-if="previewLoading" class="preview-state">
+                    <t-loading size="small" />
+                    <span>{{ $t('common.loading') }}</span>
+                </div>
+                <div v-else-if="previewError" class="preview-state preview-error">
+                    {{ previewError }}
+                </div>
+                <DocumentPreview
+                    v-else-if="previewKnowledgeId && previewFileType"
+                    :knowledgeId="previewKnowledgeId"
+                    :fileType="previewFileType"
+                    :fileName="previewFileName"
+                    :active="previewVisible"
+                />
+                <div v-else class="preview-state preview-error">
+                    {{ $t('chat.documentInfoEmpty') }}
+                </div>
+            </div>
+        </t-drawer>
     </div>
 </template>
 <script setup>
@@ -67,10 +98,12 @@ import docInfo from './docInfo.vue';
 import deepThink from './deepThink.vue';
 import AgentStreamDisplay from './AgentStreamDisplay.vue';
 import picturePreview from '@/components/picture-preview.vue';
+import DocumentPreview from '@/components/document-preview.vue';
 import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hydrateProtectedFileImages } from '@/utils/security';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useUIStore } from '@/stores/ui';
+import { getChunkByIdOnly, getKnowledgeDetails } from '@/api/knowledge-base/index';
 import {
     buildManualMarkdown,
     copyTextToClipboard,
@@ -101,6 +134,13 @@ let parentMd = ref()
 let reviewUrl = ref('')
 let reviewImg = ref(false)
 let isImgLoading = ref(false);
+const previewVisible = ref(false);
+const previewLoading = ref(false);
+const previewError = ref('');
+const previewKnowledgeId = ref('');
+const previewFileType = ref('');
+const previewFileName = ref('');
+const previewTitle = ref('');
 const props = defineProps({
     // 必填项
     content: {
@@ -137,6 +177,32 @@ const closePreImg = () => {
     reviewImg.value = false
     reviewUrl.value = '';
 }
+
+const openDocumentPreview = async (knowledgeId, title = '') => {
+    if (!knowledgeId) return;
+
+    previewVisible.value = true;
+    previewLoading.value = true;
+    previewError.value = '';
+    previewKnowledgeId.value = knowledgeId;
+    previewFileType.value = '';
+    previewFileName.value = title || '';
+    previewTitle.value = title || t('chat.documentInfoEmpty');
+
+    try {
+        const res = await getKnowledgeDetails(knowledgeId);
+        const data = res?.data || res || {};
+        previewKnowledgeId.value = data.id || knowledgeId;
+        previewFileType.value = String(data.file_type || data.type || '').toLowerCase();
+        previewFileName.value = data.file_name || data.original_file_name || data.title || title || '';
+        previewTitle.value = data.title || data.file_name || title || t('chat.documentInfoEmpty');
+    } catch (err) {
+        previewError.value = err?.message || t('preview.loadFailed');
+        MessagePlugin.error(previewError.value);
+    } finally {
+        previewLoading.value = false;
+    }
+};
 
 // 创建自定义渲染器实例
 const customRenderer = new marked.Renderer();
@@ -206,7 +272,6 @@ const handleAddToKnowledge = () => {
     const question = (props.userQuery || '').trim();
     const manualContent = buildManualMarkdown(question, content);
     const manualTitle = formatManualTitle(question);
-``
     uiStore.openManualEditor({
         mode: 'create',
         title: manualTitle,
@@ -230,6 +295,44 @@ const handleMarkdownImageClick = (e) => {
     }
 };
 
+const openReferencePreviewFromCitation = (e) => {
+    const target = e.target;
+    if (!target?.closest) return;
+
+    const kbEl = target.closest('.citation-kb');
+    if (!kbEl) return;
+
+    const chunkId = kbEl.getAttribute('data-chunk-id') || '';
+    const docTitle = kbEl.getAttribute('data-doc') || '';
+    e.preventDefault();
+    e.stopPropagation();
+
+    (async () => {
+        try {
+            let knowledgeId = '';
+            const refs = props.session?.knowledge_references || [];
+            const matchedRef = refs.find((item) => item?.id === chunkId || item?.chunk_id === chunkId);
+            knowledgeId = matchedRef?.knowledge_id || matchedRef?.knowledgeId || '';
+
+            if (!knowledgeId && chunkId) {
+                const chunkRes = await getChunkByIdOnly(chunkId);
+                const chunk = chunkRes?.data || chunkRes || {};
+                knowledgeId = chunk.knowledge_id || '';
+            }
+
+            if (!knowledgeId) {
+                MessagePlugin.warning(t('agentStream.citation.notFound'));
+                return;
+            }
+
+            openDocumentPreview(knowledgeId, docTitle);
+        } catch (err) {
+            console.error('Failed to open citation preview:', err);
+            MessagePlugin.error(t('preview.loadFailed'));
+        }
+    })();
+};
+
 // 渲染 Mermaid 图表的函数
 const renderMermaidDiagrams = async () => {
   await renderMermaidInContainer(parentMd.value);
@@ -251,6 +354,7 @@ onMounted(async () => {
     nextTick(async () => {
         if (parentMd.value) {
             parentMd.value.addEventListener('click', handleMarkdownImageClick, true);
+            parentMd.value.addEventListener('click', openReferencePreviewFromCitation, true);
         }
         await hydrateProtectedFileImages(parentMd.value);
         // 初始渲染 Mermaid 图表
@@ -261,6 +365,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     if (parentMd.value) {
         parentMd.value.removeEventListener('click', handleMarkdownImageClick, true);
+        parentMd.value.removeEventListener('click', openReferencePreviewFromCitation, true);
     }
 });
 </script>
@@ -573,6 +678,25 @@ onBeforeUnmount(() => {
     gap: 4px;
     margin-left: 16px;
     border-radius: 8px;
+}
+
+.document-preview-shell {
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+}
+
+.preview-state {
+    min-height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--td-text-color-secondary);
+}
+
+.preview-error {
+    color: var(--td-error-color);
 }
 
 :deep(.t-loading__gradient-conic) {

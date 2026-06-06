@@ -26,6 +26,8 @@ const DOMPurifyConfig = {
   // 允许的属性
   ALLOWED_ATTR: [
     'href', 'title', 'alt', 'src', 'class', 'id', 'style', 'data-protected-src',
+    'data-kb-id', 'data-chunk-id', 'data-doc', 'data-url', 'data-tooltip', 'data-slug',
+    'role', 'tabindex',
     'target', 'rel', 'width', 'height',
     // Mermaid SVG 支持的属性
     'd', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
@@ -358,6 +360,11 @@ export async function hydrateProtectedFileImages(root: ParentNode | null | undef
       }
     } catch (error) {
       console.warn('[security] hydrateProtectedFileImages failed:', error);
+      // Fallback to the original proxied file URL so the browser can still
+      // attempt to load the image with cookie-based auth in preview/reader UIs.
+      if (requestURL.startsWith('/files?')) {
+        img.src = requestURL;
+      }
       img.dataset.authHydrated = '0';
     }
   }));
